@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>中文网课互动白板 - 终极云端版</title>
+    <title>中文网课互动白板 - 终极完全体</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/pinyin-pro@3.16.0/dist/index.js"></script>
     <!-- 核心库引入 -->
@@ -114,7 +114,6 @@
             <div class="relative flex-1 overflow-hidden rounded-lg border border-slate-200 bg-white">
                 <canvas id="drawCanvas"></canvas>
                 
-                <!-- 强力加载遮罩 -->
                 <div id="loadingOverlay" class="loader-overlay hidden">
                     <div class="spinner"></div>
                     <p class="text-slate-700 font-bold text-lg">正在深度解析文档，请稍候...</p>
@@ -125,7 +124,7 @@
                      contenteditable="true" 
                      class="absolute inset-0 w-full h-full p-4 text-xl md:text-2xl text-slate-700 overflow-auto z-10"
                 >
-                    <p>欢迎使用！<br>1. 右侧上传 PDF/Word，系统会尝试提取文字。<br>2. 提取成功后，可自由划选加拼音、加翻译。</p>
+                    <p>欢迎使用！<br>1. 右侧上传 PDF/Word 自动解析提取文字。<br>2. 划选文字加拼音、翻译。<br>3. 一键生成复习笔记或测试卷。</p>
                 </div>
             </div>
         </div>
@@ -167,25 +166,52 @@
                 <p id="fileNameDisplay" class="text-[10px] text-slate-500 mt-1 truncate"></p>
             </div>
 
+            <!-- AI 功能区 -->
             <div class="flex flex-col gap-2.5 mt-auto pt-2">
                 <button id="btnGenNotes" class="w-full bg-emerald-600 text-white py-2 rounded-lg font-medium hover:bg-emerald-700 transition text-sm cursor-pointer flex justify-center items-center">
                     📚 一键整理白板笔记
                 </button>
+                <button id="btnDownloadNotes" class="hidden w-full bg-emerald-700 text-white py-1.5 rounded-lg text-xs hover:bg-emerald-800 transition cursor-pointer">
+                    📥 下载复习笔记 (Word)
+                </button>
+
                 <button id="btnGenEx" class="w-full bg-indigo-600 text-white py-2 rounded-lg font-medium hover:bg-indigo-700 transition text-sm cursor-pointer flex justify-center items-center mt-2 border-t border-slate-200 pt-3">
                     ✍️ 生成全套测试题
+                </button>
+                <button id="btnDownloadEx" class="hidden w-full bg-indigo-700 text-white py-1.5 rounded-lg text-xs hover:bg-indigo-800 transition cursor-pointer">
+                    📥 下载测试题 (Word)
                 </button>
             </div>
         </div>
     </div>
 
+    <!-- 试卷 Modal -->
+    <div id="examModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex justify-center items-center p-4">
+        <div class="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl flex flex-col">
+            <div class="flex justify-between items-center p-5 border-b border-slate-200">
+                <h2 id="modalTitle" class="text-xl font-bold text-slate-800">📄 生成内容预览</h2>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-red-500 text-2xl font-bold">&times;</button>
+            </div>
+            <div id="examContent" class="p-6 overflow-y-auto flex-1 text-slate-700 whitespace-pre-wrap font-mono text-sm leading-relaxed bg-gray-50"></div>
+            <div class="p-4 border-t flex justify-end gap-3 bg-white rounded-b-2xl">
+                <button onclick="copyExam()" class="px-5 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 font-medium">📋 复制</button>
+                <button id="modalDownloadBtn" class="px-5 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">📥 下载 Word</button>
+            </div>
+        </div>
+    </div>
+
     <script>
-        // 指定 PDF.js 的云端 Worker 路径，确保云部署绝对可用
+        // 指定 PDF.js 的云端 Worker 路径
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
+        let exerciseContentText = "";
+        let noteContentText = "";
+        let extractedFileText = "";
+        let currentMode = ""; 
         const whiteboard = document.getElementById('whiteboardContent');
         const loadingOverlay = document.getElementById('loadingOverlay');
 
-        // ================= 核心：全格式解析引擎 =================
+        // ================= 核心：文档解析引擎 =================
         document.getElementById('documentFile').addEventListener('change', async function(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -199,7 +225,8 @@
                 if (fileName.endsWith('.txt')) {
                     const reader = new FileReader();
                     reader.onload = (e) => {
-                        whiteboard.innerHTML = `<p>${e.target.result.replace(/\n/g, '</p><p>')}</p>`;
+                        extractedFileText = e.target.result;
+                        whiteboard.innerHTML = `<p>${extractedFileText.replace(/\n/g, '</p><p>')}</p>`;
                         loadingOverlay.classList.add('hidden');
                     };
                     reader.readAsText(file, 'UTF-8');
@@ -208,7 +235,8 @@
                     const reader = new FileReader();
                     reader.onload = (e) => {
                         mammoth.extractRawText({ arrayBuffer: e.target.result }).then(result => {
-                            whiteboard.innerHTML = `<p>${result.value.replace(/\n/g, '</p><p>')}</p>`;
+                            extractedFileText = result.value;
+                            whiteboard.innerHTML = `<p>${extractedFileText.replace(/\n/g, '</p><p>')}</p>`;
                             loadingOverlay.classList.add('hidden');
                         }).catch(err => {
                             alert("Word 解析失败：" + err.message);
@@ -225,34 +253,29 @@
                             const pdf = await pdfjsLib.getDocument(typedarray).promise;
                             let fullText = "";
                             
-                            // 逐页解析
                             for (let i = 1; i <= pdf.numPages; i++) {
                                 const page = await pdf.getPage(i);
                                 const textContent = await page.getTextContent();
-                                
                                 let pageText = "";
                                 textContent.items.forEach(item => {
                                     pageText += item.str;
-                                    // 如果遇到较大的间距或换行
                                     if (item.hasEOL) pageText += "\n";
                                 });
                                 fullText += pageText + "\n";
                             }
                             
-                            // 处理提取结果
                             if (!fullText.trim()) {
                                 alert("❌ 提取失败：该 PDF 可能是纯图片扫描版，里面没有真实文字。\n\n💡 解决办法：请用微信/QQ截图提取文字，或手动复制后粘贴到左侧白板。");
                                 whiteboard.innerHTML = '<p>该PDF未提取到文本，请手动复制。</p>';
                             } else {
-                                // 清理多余空行并应用到白板
+                                extractedFileText = fullText;
                                 let cleanHtml = fullText
-                                    .replace(/\n{3,}/g, '\n\n') // 限制最多两个连续换行
+                                    .replace(/\n{3,}/g, '\n\n')
                                     .split('\n')
                                     .map(line => line.trim() ? `<p>${line}</p>` : '<br>')
                                     .join('');
                                 whiteboard.innerHTML = cleanHtml;
                             }
-                            
                             loadingOverlay.classList.add('hidden');
                         } catch (err) {
                             alert("PDF 解析引擎崩溃：\n" + err.message);
@@ -270,6 +293,7 @@
         document.getElementById('btnClearFile').addEventListener('click', function() {
             document.getElementById('documentFile').value = "";
             document.getElementById('fileNameDisplay').textContent = "";
+            extractedFileText = "";
         });
 
         // ================= 基础操作 =================
@@ -286,13 +310,11 @@
         document.getElementById('btnBold').addEventListener('click', () => { document.execCommand('bold', false, null); });
         document.getElementById('btnRed').addEventListener('click', () => { document.execCommand('foreColor', false, '#ef4444'); });
 
-        // 加拼音
         document.getElementById('btnAddPinyin').addEventListener('click', function() {
             const selection = window.getSelection();
             if (!selection.rangeCount) return;
             const range = selection.getRangeAt(0);
             const selectedText = selection.toString().trim();
-
             if (!selectedText) { alert('请先用鼠标选中需要加拼音的汉字！'); return; }
 
             const fragment = document.createDocumentFragment();
@@ -315,7 +337,7 @@
             selection.removeAllRanges();
         });
 
-        // 加翻译
+        // ================= 划选加翻译 =================
         document.getElementById('btnTranslate').addEventListener('click', async function() {
             const selection = window.getSelection();
             if (!selection.rangeCount) return;
@@ -364,6 +386,154 @@
             engLine.after(document.createElement('br'));
             selection.removeAllRanges();
         });
+
+        // ================= 一键整理笔记 =================
+        document.getElementById('btnGenNotes').addEventListener('click', async function() {
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const level = document.getElementById('studentLevel').value;
+            const whiteboardText = whiteboard.innerText.trim();
+            let sourceText = whiteboardText.length > 10 ? whiteboardText : extractedFileText;
+            
+            if (!apiKey) { alert('生成笔记必须填入 DeepSeek API Key！'); return; }
+            if (!sourceText) { alert('白板和上传文档中都没有内容！'); return; }
+
+            const btn = this;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = `<span class="loader"></span> 正在提炼笔记...`;
+            btn.disabled = true;
+
+            let prompt = `你是一位拥有10年经验的国际中文教师。请根据我提供的白板语料，提取出结构化复习笔记。
+【严格要求】
+1. 不要照抄原文，请进行分类汇总。
+2. 必须包含四个板块：【核心词汇】（带拼音和词性）、【重点语法】、【典型例句】（中英对照）、【课后练习】（出2道小题）。
+3. 语言要精炼，排版要像印刷出来的讲义一样清晰。
+【白板语料】\n${sourceText}`;
+
+            try {
+                const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+                    body: JSON.stringify({ model: "deepseek-chat", messages: [{ role: "user", content: prompt }] })
+                });
+                const data = await res.json();
+                noteContentText = data.choices[0].message.content;
+                currentMode = 'note';
+                
+                document.getElementById('modalTitle').innerText = "📚 复习笔记整理完毕";
+                document.getElementById('examContent').innerText = noteContentText;
+                document.getElementById('examModal').classList.remove('hidden');
+                document.getElementById('btnDownloadNotes').classList.remove('hidden');
+            } catch (e) { alert("整理失败：" + e.message); }
+            finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        });
+
+        // ================= 生成测试题 =================
+        document.getElementById('btnGenEx').addEventListener('click', async function() {
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const level = document.getElementById('studentLevel').value;
+            const topic = document.getElementById('courseTopic').value.trim() || '综合应用';
+            const whiteboardText = whiteboard.innerText.trim();
+            
+            let sourceText = whiteboardText.length > 10 ? whiteboardText : extractedFileText;
+            if (!sourceText) { alert('无内容可出题！'); return; }
+            if (!apiKey) { alert('必须填入 DeepSeek API Key！'); return; }
+
+            const btn = this;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = `<span class="loader"></span> AI 正在出题...`;
+            btn.disabled = true;
+
+            let pinyinRule = (level === "HSK 1" || level === "HSK 2") ? "【重要】所有句子和选项必须标出拼音！格式为：第一行拼音，第二行汉字。" : "";
+
+            let prompt = `你是一个极度严格的 ${level} 命题专家。生成一套关于“${topic}”的测试题。
+${pinyinRule}
+【要求】包含听力、阅读、书写三大板块，附带答案与解析。无法显示图片请用【图：描述】代替。
+【语料】\n${sourceText}`;
+
+            try {
+                const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+                    body: JSON.stringify({ model: "deepseek-chat", messages: [{ role: "user", content: prompt }] })
+                });
+                const data = await res.json();
+                exerciseContentText = data.choices[0].message.content;
+                currentMode = 'exam';
+                
+                document.getElementById('modalTitle').innerText = "📄 AI 生成的测试题";
+                document.getElementById('examContent').innerText = exerciseContentText;
+                document.getElementById('examModal').classList.remove('hidden');
+                document.getElementById('btnDownloadEx').classList.remove('hidden');
+            } catch (e) { alert("出题失败：" + e.message); }
+            finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        });
+
+        // 弹窗统一控制与下载
+        document.getElementById('modalDownloadBtn').addEventListener('click', function() {
+            const textToDownload = currentMode === 'note' ? noteContentText : exerciseContentText;
+            const fileName = currentMode === 'note' ? '复习笔记' : '测试题';
+            const blob = new Blob(['\ufeff' + textToDownload], { type: 'application/msword' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `${fileName}_${document.getElementById('studentLevel').value}.doc`;
+            a.click();
+        });
+
+        function closeModal() { document.getElementById('examModal').classList.add('hidden'); }
+        function copyExam() { 
+            const text = document.getElementById('examContent').innerText;
+            navigator.clipboard.writeText(text).then(() => alert('已复制到剪贴板！')); 
+        }
+
+        // 画笔简写
+        const canvas = document.getElementById('drawCanvas');
+        const ctx = canvas.getContext('2d');
+        let isDrawing = false, isDrawMode = false, penColor = '#ef4444', strokes = [];
+        document.getElementById('btnDraw').addEventListener('click', function() {
+            isDrawMode = !isDrawMode;
+            this.classList.toggle('btn-draw-active');
+            canvas.classList.toggle('active');
+            document.getElementById('drawToolbar').style.display = isDrawMode ? 'flex' : 'none';
+            whiteboard.style.pointerEvents = isDrawMode ? 'none' : 'auto';
+            if(isDrawMode) {
+                canvas.width = canvas.parentElement.offsetWidth;
+                canvas.height = canvas.parentElement.offsetHeight;
+            }
+        });
+        function setPenColor(c, el) { penColor = c; document.querySelectorAll('.color-btn').forEach(e=>e.classList.remove('active')); el.classList.add('active'); }
+        canvas.addEventListener('mousedown', e => {
+            isDrawing = true;
+            const rect = canvas.getBoundingClientRect();
+            ctx.beginPath(); ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+            strokes.push({ color: penColor, points: [{x: e.clientX - rect.left, y: e.clientY - rect.top}] });
+        });
+        canvas.addEventListener('mousemove', e => {
+            if(!isDrawing) return;
+            const rect = canvas.getBoundingClientRect();
+            ctx.strokeStyle = penColor; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+            ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top); ctx.stroke();
+            strokes[strokes.length - 1].points.push({x: e.clientX - rect.left, y: e.clientY - rect.top});
+        });
+        canvas.addEventListener('mouseup', () => isDrawing = false);
+        function redraw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            strokes.forEach(s => {
+                ctx.beginPath(); ctx.strokeStyle = s.color; ctx.lineWidth = 4;
+                if(s.points.length > 0) {
+                    ctx.moveTo(s.points[0].x, s.points[0].y);
+                    s.points.forEach(p => ctx.lineTo(p.x, p.y));
+                    ctx.stroke();
+                }
+            });
+        }
+        function clearCanvas() { strokes = []; redraw(); }
+        function undoStroke() { strokes.pop(); redraw(); }
 
         document.getElementById('btnClear').addEventListener('click', function() {
             if(confirm("确定清空白板文字？")) {
