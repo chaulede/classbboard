@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中文网课互动白板 - 云端满血版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pinyin-pro@3.16.0/dist/index.js"></script>
+    <!-- 核心：引入 PDF.js 和 Word 解析库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.16/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        #whiteboardContent {
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            line-height: 3.5; 
+            outline: none;
+            word-break: break-word;
+            padding-top: 20px;
+        }
+
+        ruby {
+            ruby-align: center;
+            margin: 0 4px;
+            font-size: 1em;
+        }
+
+        rt {
+            font-size: 0.8em !important;
+            color: #1d4ed8 !important; 
+            font-family: 'Arial', sans-serif !important;
+            font-weight: bold !important;
+            margin-bottom: 2px;
+            line-height: 1.1;
+        }
+
+        .english-line {
+            display: block;
+            font-size: 1.1em !important;
+            color: #64748b;
+            font-family: 'Arial', sans-serif;
+            font-style: italic;
+            border-left: 4px solid #cbd5e1;
+            padding-left: 12px !important;
+            margin: 15px 0 30px 0 !important; 
+            line-height: 1.4 !important;
+        }
+
+        .toolbar-btn {
+            padding: 6px 10px;
+            background-color: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 13px;
+            color: #334155;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .toolbar-btn:hover { background-color: #e2e8f0; }
+
+        .btn-draw-active { background-color: #3b82f6; color: white; border-color: #2563eb; }
+        
+        #drawToolbar {
+            display: none; 
+            position: absolute;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            z-index: 100;
+            align-items: center;
+            gap: 12px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .color-btn {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+        .color-btn.active { border-color: #334155; transform: scale(1.15); }
+        .color-btn:hover { transform: scale(1.15); }
+
+        #drawCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 50;
+            pointer-events: none; 
+        }
+
+        #drawCanvas.active {
+            pointer-events: auto; 
+            cursor: crosshair;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen p-4 md:p-6 overflow-hidden">
+    <div class="flex flex-col md:flex-row h-[calc(100vh-3rem)] gap-6">
+        
+        <!-- 左侧：白板 -->
+        <div class="flex-1 bg-white rounded-2xl shadow-lg flex flex-col border-4 border-blue-200 p-4 md:p-6 relative">
+            
+            <div id="drawToolbar">
+                <span class="text-sm font-bold text-slate-600 mr-2">画笔颜色:</span>
+                <div class="flex gap-2">
+                    <div class="color-btn active" style="background-color: #ef4444;" onclick="setPenColor('#ef4444', this)"></div>
+                    <div class="color-btn" style="background-color: #3b82f6;" onclick="setPenColor('#3b82f6', this)"></div>
+                    <div class="color-btn" style="background-color: #eab308;" onclick="setPenColor('#eab308', this)"></div>
+                    <div class="color-btn" style="background-color: #111;" onclick="setPenColor('#111', this)"></div>
+                </div>
+                <div class="w-px h-6 bg-slate-300 mx-2"></div>
+                <button onclick="clearCanvas()" class="text-xs bg-red-100 text-red-700 px-3 py-1 rounded hover:bg-red-200 font-bold">🧹 清空笔迹</button>
+                <button onclick="undoStroke()" class="text-xs bg-slate-100 text-slate-700 px-3 py-1 rounded hover:bg-slate-200 font-bold">↩️ 撤销笔迹</button>
+            </div>
+
+            <div class="flex items-center justify-between pb-3 border-b border-slate-200 mb-4 flex-wrap gap-2">
+                <div class="flex items-center">
+                    <span class="text-2xl mr-3">📝</span>
+                    <h2 class="text-xl font-bold text-slate-800">中文互动白板</h2>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-sm text-slate-500">字号:</span>
+                    <button id="btnAPlus" class="toolbar-btn font-bold" title="放大字号">A+</button>
+                    <button id="btnAMinus" class="toolbar-btn font-bold" title="缩小字号">A-</button>
+                    <span class="mx-1 text-slate-300">|</span>
+                    <button id="btnBold" class="toolbar-btn font-bold" style="font-family: serif;" title="加粗">B</button>
+                    <button id="btnRed" class="toolbar-btn text-red-500 font-bold" title="标红">A</button>
+                    <span class="mx-1 text-slate-300">|</span>
+                    <button id="btnDraw" class="toolbar-btn bg-slate-100 text-slate-700 border-slate-300 font-bold">
+                        ✏️ 电子教鞭
+                    </button>
+                    <button id="btnAddPinyin" class="toolbar-btn bg-blue-100 text-blue-700 border-blue-300 font-bold">
+                        ✨ 划选加拼音
+                    </button>
+                    <button id="btnTranslate" class="toolbar-btn bg-purple-100 text-purple-700 border-purple-300 font-bold">
+                        🌐 划选加翻译
+                    </button>
+                    <button id="btnUndo" class="toolbar-btn bg-amber-50 text-amber-700 border-amber-200">↩️ 撤销</button>
+                    <button id="btnRedo" class="toolbar-btn bg-amber-50 text-amber-700 border-amber-200">⏭️ 还原</button>
+                    <button id="btnClear" class="toolbar-btn bg-red-50 text-red-700 border-red-200">🗑️ 清空</button>
+                </div>
+            </div>
+
+            <div class="relative flex-1 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                <canvas id="drawCanvas"></canvas>
+                <div id="whiteboardContent" 
+                     contenteditable="true" 
+                     class="absolute inset-0 w-full h-full p-4 text-xl md:text-2xl text-slate-700 overflow-auto z-10"
+                >
+                    <p>欢迎使用！<br>在云端环境下，右侧上传 PDF/Word/TXT 均可直接解析并显示在这里。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧：控制面板 -->
+        <div class="w-full md:w-80 bg-white rounded-2xl shadow p-5 flex flex-col space-y-4 border border-slate-200 overflow-y-auto">
+            <div class="text-center">
+                <h1 class="text-lg font-bold text-slate-800">📖 智能课堂助手</h1>
+            </div>
+
+            <div class="bg-blue-50 p-2 rounded-lg border border-blue-100">
+                <label class="block text-xs font-medium text-slate-700 mb-1">🔑 DeepSeek API Key (必填)</label>
+                <input type="password" id="apiKey" placeholder="sk-..." class="w-full border border-slate-300 rounded-lg p-2 text-xs outline-none focus:ring-1 focus:ring-blue-500">
+            </div>
+            
+            <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">📌 学生级别</label>
+                <select id="studentLevel" class="w-full border border-slate-300 rounded-lg p-2 text-sm outline-none focus:ring-1 focus:ring-blue-500">
+                    <option value="HSK 1">HSK 1</option>
+                    <option value="HSK 2">HSK 2</option>
+                    <option value="HSK 3" selected>HSK 3</option>
+                    <option value="HSK 4">HSK 4</option>
+                    <option value="HSK 5">HSK 5</option>
+                    <option value="HSK 6">HSK 6</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">🎯 课程主题</label>
+                <input type="text" id="courseTopic" placeholder="例如：在餐厅点菜" class="w-full border border-slate-300 rounded-lg p-2 text-sm outline-none focus:ring-1 focus:ring-blue-500">
+            </div>
+
+            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <label class="block text-xs font-medium text-slate-700 mb-1">📂 上传教学文档 (PDF/Word/TXT)</label>
+                <div class="flex items-center gap-2">
+                    <input type="file" id="documentFile" accept=".pdf,.docx,.doc,.txt,.pptx,.ppt" class="w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 cursor-pointer">
+                    <button id="btnClearFile" class="text-red-500 hover:text-red-700 font-bold px-2 py-1 bg-red-50 rounded" title="删除上传的文件">✖</button>
+                </div>
+                <p id="fileNameDisplay" class="text-[10px] text-slate-500 mt-1 truncate"></p>
+            </div>
+
+            <div class="flex flex-col gap-2.5 mt-auto pt-2">
+                <button id="btnGenNotes" class="w-full bg-emerald-600 text-white py-2 rounded-lg font-medium hover:bg-emerald-700 transition text-sm cursor-pointer flex justify-center items-center">
+                    📚 一键整理白板笔记
+                </button>
+                <button id="btnGenEx" class="w-full bg-indigo-600 text-white py-2 rounded-lg font-medium hover:bg-indigo-700 transition text-sm cursor-pointer flex justify-center items-center mt-2 border-t border-slate-200 pt-3">
+                    ✍️ 生成全套测试题
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 试卷 Modal -->
+    <div id="examModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex justify-center items-center p-4">
+        <div class="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl flex flex-col">
+            <div class="flex justify-between items-center p-5 border-b border-slate-200">
+                <h2 id="modalTitle" class="text-xl font-bold text-slate-800">📄 生成内容预览</h2>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-red-500 text-2xl font-bold">&times;</button>
+            </div>
+            <div id="examContent" class="p-6 overflow-y-auto flex-1 text-slate-700 whitespace-pre-wrap font-mono text-sm leading-relaxed bg-gray-50"></div>
+            <div class="p-4 border-t flex justify-end gap-3 bg-white rounded-b-2xl">
+                <button onclick="copyExam()" class="px-5 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 font-medium">📋 复制</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ⭐ 核心：指定 PDF 解析引擎的云端路径
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+        let extractedFileText = "";
+        const whiteboard = document.getElementById('whiteboardContent');
+
+        // ================= 全格式解析引擎 =================
+        document.getElementById('documentFile').addEventListener('change', async function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            document.getElementById('fileNameDisplay').textContent = `正在解析: ${file.name}...`;
+            const fileName = file.name.toLowerCase();
+            
+            try {
+                if (fileName.endsWith('.txt')) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        extractedFileText = e.target.result;
+                        whiteboard.innerHTML = `<p>${extractedFileText.replace(/\n/g, '</p><p>')}</p>`;
+                        document.getElementById('fileNameDisplay').textContent = `已加载: ${file.name}`;
+                    };
+                    reader.readAsText(file, 'UTF-8');
+                } 
+                else if (fileName.endsWith('.docx') || fileName.endsWith('.doc')) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        mammoth.extractRawText({ arrayBuffer: e.target.result }).then(result => {
+                            extractedFileText = result.value;
+                            whiteboard.innerHTML = `<p>${extractedFileText.replace(/\n/g, '</p><p>')}</p>`;
+                            document.getElementById('fileNameDisplay').textContent = `已加载: ${file.name}`;
+                        }).catch(err => {
+                            alert("Word 解析失败，请尝试另存为 TXT。");
+                        });
+                    };
+                    reader.readAsArrayBuffer(file);
+                } 
+                else if (fileName.endsWith('.pdf')) {
+                    const reader = new FileReader();
+                    reader.onload = async (e) => {
+                        try {
+                            const typedarray = new Uint8Array(e.target.result);
+                            const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                            let fullText = "";
+                            for (let i = 1; i <= pdf.numPages; i++) {
+                                const page = await pdf.getPage(i);
+                                const textContent = await page.getTextContent();
+                                fullText += textContent.items.map(item => item.str).join(' ') + "\n";
+                            }
+                            extractedFileText = fullText;
+                            whiteboard.innerHTML = `<p>${extractedFileText.replace(/\n/g, '</p><p>')}</p>`;
+                            document.getElementById('fileNameDisplay').textContent = `已加载: ${file.name}`;
+                        } catch (err) {
+                            alert("PDF 解析出错：" + err.message);
+                        }
+                    };
+                    reader.readAsArrayBuffer(file);
+                }
+            } catch (err) { alert("文件解析出错。"); }
+        });
+
+        document.getElementById('btnClearFile').addEventListener('click', function() {
+            document.getElementById('documentFile').value = "";
+            document.getElementById('fileNameDisplay').textContent = "";
+            extractedFileText = "";
+        });
+
+        // ================= 基础操作与划选 =================
+        let currentFontSize = 24;
+        whiteboard.style.fontSize = currentFontSize + 'px';
+
+        document.getElementById('btnAPlus').addEventListener('click', () => {
+            currentFontSize = Math.min(80, currentFontSize + 2);
+            whiteboard.style.fontSize = currentFontSize + 'px';
+        });
+        document.getElementById('btnAMinus').addEventListener('click', () => {
+            currentFontSize = Math.max(14, currentFontSize - 2);
+            whiteboard.style.fontSize = currentFontSize + 'px';
+        });
+        document.getElementById('btnBold').addEventListener('click', () => { document.execCommand('bold', false, null); });
+        document.getElementById('btnRed').addEventListener('click', () => { document.execCommand('foreColor', false, '#ef4444'); });
+
+        document.getElementById('btnAddPinyin').addEventListener('click', function() {
+            const selection = window.getSelection();
+            if (!selection.rangeCount) return;
+            const range = selection.getRangeAt(0);
+            const selectedText = selection.toString().trim();
+
+            if (!selectedText) { alert('请先用鼠标选中需要加拼音的汉字！'); return; }
+
+            const fragment = document.createDocumentFragment();
+            for (let char of selectedText) {
+                if (/[\u4e00-\u9fa5]/.test(char)) {
+                    let py = window.pinyinPro.pinyin(char, { toneType: 'symbol' });
+                    const ruby = document.createElement('ruby');
+                    ruby.textContent = char;
+                    const rt = document.createElement('rt');
+                    rt.textContent = py;
+                    ruby.appendChild(rt);
+                    fragment.appendChild(ruby);
+                    fragment.appendChild(document.createTextNode('\u200B'));
+                } else {
+                    fragment.appendChild(document.createTextNode(char === ' ' ? '\u00A0' : char));
+                }
+            }
+            range.deleteContents();
+            range.insertNode(fragment);
+            selection.removeAllRanges();
+        });
+
+        // 简写翻译和出题
+        document.getElementById('btnTranslate').addEventListener('click', async function() {
+            const selection = window.getSelection();
+            if (!selection.rangeCount) return;
+            const range = selection.getRangeAt(0);
+            const selectedText = selection.toString().trim();
+            if (!selectedText) { alert('请先用鼠标选中需要翻译的汉字！'); return; }
+
+            const btn = this;
+            btn.innerHTML = "🌐 翻译中...";
+            btn.disabled = true;
+
+            let translation = "";
+            const apiKey = document.getElementById('apiKey').value.trim();
+
+            try {
+                if (apiKey) {
+                    const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+                        body: JSON.stringify({
+                            model: "deepseek-chat",
+                            messages: [{ role: "system", content: "Translate Chinese to English. ONLY output the English translation." }, { role: "user", content: selectedText }],
+                            temperature: 0.1
+                        })
+                    });
+                    const data = await res.json();
+                    translation = data.choices[0].message.content.trim();
+                } else {
+                    const res = await fetch(`https://api.vvhan.com/api/fy?text=${encodeURIComponent(selectedText)}`);
+                    const data = await res.json();
+                    if (data.success && data.data) translation = data.data.en;
+                }
+            } catch (e) { translation = "(翻译失败)"; }
+
+            btn.innerHTML = "🌐 划选加翻译";
+            btn.disabled = false;
+
+            const engLine = document.createElement('div');
+            engLine.className = 'english-line';
+            engLine.textContent = translation;
+
+            range.collapse(false);
+            const br = document.createElement('br');
+            range.insertNode(br);
+            range.insertNode(engLine);
+            engLine.after(document.createElement('br'));
+            selection.removeAllRanges();
+        });
+
+        document.getElementById('btnClear').addEventListener('click', function() {
+            if(confirm("确定清空白板文字？")) {
+                whiteboard.innerHTML = '<p><br></p>';
+            }
+        });
+    </script>
+</body>
+</html>
