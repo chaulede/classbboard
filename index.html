@@ -63,6 +63,12 @@
             border: 4px solid rgba(0, 0, 0, 0.1); width: 40px; height: 40px;
             border-radius: 50%; border-left-color: #4f46e5; animation: spin 1s linear infinite; margin-bottom: 15px;
         }
+        /* 修复按钮内的加载小图标样式 */
+        .loader {
+            border: 2px solid rgba(255, 255, 255, 0.3); width: 16px; height: 16px;
+            border-radius: 50%; border-left-color: #ffffff; animation: spin 1s linear infinite;
+            display: inline-block; vertical-align: middle; margin-right: 6px;
+        }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
@@ -213,7 +219,7 @@
         const whiteboard = document.getElementById('whiteboardContent');
         const loadingOverlay = document.getElementById('loadingOverlay');
 
-        // ================= 恢复：历史记录引擎 =================
+        // ================= 历史记录引擎 =================
         let undoStack = [];
         let redoStack = [];
         let isUndoRedoing = false; 
@@ -248,7 +254,7 @@
             } else alert('已经是最新的状态了！');
         });
 
-        // ================= 核心：文档解析引擎 =================
+        // ================= 文档解析引擎 =================
         document.getElementById('documentFile').addEventListener('change', async function(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -395,7 +401,8 @@
 
             try {
                 if (apiKey) {
-                    const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+                    // 已修正 DeepSeek 官方标准接口地址（去掉 /v1）
+                    const res = await fetch('https://api.deepseek.com/chat/completions', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
                         body: JSON.stringify({
@@ -452,7 +459,8 @@
 【白板语料】\n${sourceText}`;
 
             try {
-                const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+                // 已修正 DeepSeek 官方标准接口地址（去掉 /v1）
+                const res = await fetch('https://api.deepseek.com/chat/completions', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
                     body: JSON.stringify({ model: "deepseek-chat", messages: [{ role: "user", content: prompt }] })
@@ -496,7 +504,8 @@ ${pinyinRule}
 【语料】\n${sourceText}`;
 
             try {
-                const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+                // 已修正 DeepSeek 官方标准接口地址（去掉 /v1）
+                const res = await fetch('https://api.deepseek.com/chat/completions', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
                     body: JSON.stringify({ model: "deepseek-chat", messages: [{ role: "user", content: prompt }] })
@@ -537,6 +546,7 @@ ${pinyinRule}
         const canvas = document.getElementById('drawCanvas');
         const ctx = canvas.getContext('2d');
         let isDrawing = false, isDrawMode = false, penColor = '#ef4444', strokes = [];
+        
         document.getElementById('btnDraw').addEventListener('click', function() {
             isDrawMode = !isDrawMode;
             this.classList.toggle('btn-draw-active');
@@ -546,9 +556,12 @@ ${pinyinRule}
             if(isDrawMode) {
                 canvas.width = canvas.parentElement.offsetWidth;
                 canvas.height = canvas.parentElement.offsetHeight;
+                redraw(); // 修复切换教鞭时笔迹被清空的问题
             }
         });
+
         function setPenColor(c, el) { penColor = c; document.querySelectorAll('.color-btn').forEach(e=>e.classList.remove('active')); el.classList.add('active'); }
+        
         canvas.addEventListener('mousedown', e => {
             isDrawing = true;
             const rect = canvas.getBoundingClientRect();
@@ -563,6 +576,7 @@ ${pinyinRule}
             strokes[strokes.length - 1].points.push({x: e.clientX - rect.left, y: e.clientY - rect.top});
         });
         canvas.addEventListener('mouseup', () => isDrawing = false);
+        
         function redraw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             strokes.forEach(s => {
