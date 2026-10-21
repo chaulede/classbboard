@@ -107,6 +107,9 @@
                     <button id="btnTranslate" class="toolbar-btn bg-purple-100 text-purple-700 border-purple-300 font-bold">
                         🌐 划选加翻译
                     </button>
+                    <!-- 恢复的撤销还原按钮 -->
+                    <button id="btnUndo" class="toolbar-btn bg-amber-50 text-amber-700 border-amber-200">↩️ 撤销</button>
+                    <button id="btnRedo" class="toolbar-btn bg-amber-50 text-amber-700 border-amber-200">⏭️ 还原</button>
                     <button id="btnClear" class="toolbar-btn bg-red-50 text-red-700 border-red-200">🗑️ 清空</button>
                 </div>
             </div>
@@ -166,7 +169,6 @@
                 <p id="fileNameDisplay" class="text-[10px] text-slate-500 mt-1 truncate"></p>
             </div>
 
-            <!-- AI 功能区 -->
             <div class="flex flex-col gap-2.5 mt-auto pt-2">
                 <button id="btnGenNotes" class="w-full bg-emerald-600 text-white py-2 rounded-lg font-medium hover:bg-emerald-700 transition text-sm cursor-pointer flex justify-center items-center">
                     📚 一键整理白板笔记
@@ -211,6 +213,41 @@
         const whiteboard = document.getElementById('whiteboardContent');
         const loadingOverlay = document.getElementById('loadingOverlay');
 
+        // ================= 恢复：历史记录引擎 =================
+        let undoStack = [];
+        let redoStack = [];
+        let isUndoRedoing = false; 
+
+        function saveHistory() {
+            if (isUndoRedoing) return;
+            if (undoStack.length > 50) undoStack.shift();
+            undoStack.push(whiteboard.innerHTML);
+            redoStack = []; // 每次有新操作，清空重做栈
+        }
+        saveHistory();
+
+        // 监听用户的键盘输入
+        whiteboard.addEventListener('input', function() { saveHistory(); });
+
+        document.getElementById('btnUndo').addEventListener('click', function() {
+            if (undoStack.length > 1) {
+                isUndoRedoing = true;
+                redoStack.push(undoStack.pop());
+                whiteboard.innerHTML = undoStack[undoStack.length - 1];
+                isUndoRedoing = false;
+            } else alert('已经是最初的状态了！');
+        });
+
+        document.getElementById('btnRedo').addEventListener('click', function() {
+            if (redoStack.length > 0) {
+                isUndoRedoing = true;
+                const nextState = redoStack.pop();
+                undoStack.push(nextState);
+                whiteboard.innerHTML = nextState;
+                isUndoRedoing = false;
+            } else alert('已经是最新的状态了！');
+        });
+
         // ================= 核心：文档解析引擎 =================
         document.getElementById('documentFile').addEventListener('change', async function(event) {
             const file = event.target.files[0];
@@ -228,6 +265,7 @@
                         extractedFileText = e.target.result;
                         whiteboard.innerHTML = `<p>${extractedFileText.replace(/\n/g, '</p><p>')}</p>`;
                         loadingOverlay.classList.add('hidden');
+                        saveHistory();
                     };
                     reader.readAsText(file, 'UTF-8');
                 } 
@@ -238,6 +276,7 @@
                             extractedFileText = result.value;
                             whiteboard.innerHTML = `<p>${extractedFileText.replace(/\n/g, '</p><p>')}</p>`;
                             loadingOverlay.classList.add('hidden');
+                            saveHistory();
                         }).catch(err => {
                             alert("Word 解析失败：" + err.message);
                             loadingOverlay.classList.add('hidden');
@@ -277,6 +316,7 @@
                                 whiteboard.innerHTML = cleanHtml;
                             }
                             loadingOverlay.classList.add('hidden');
+                            saveHistory();
                         } catch (err) {
                             alert("PDF 解析引擎崩溃：\n" + err.message);
                             loadingOverlay.classList.add('hidden');
@@ -335,6 +375,7 @@
             range.deleteContents();
             range.insertNode(fragment);
             selection.removeAllRanges();
+            saveHistory();
         });
 
         // ================= 划选加翻译 =================
@@ -385,6 +426,7 @@
             range.insertNode(engLine);
             engLine.after(document.createElement('br'));
             selection.removeAllRanges();
+            saveHistory();
         });
 
         // ================= 一键整理笔记 =================
@@ -538,6 +580,7 @@ ${pinyinRule}
         document.getElementById('btnClear').addEventListener('click', function() {
             if(confirm("确定清空白板文字？")) {
                 whiteboard.innerHTML = '<p><br></p>';
+                saveHistory();
             }
         });
     </script>
