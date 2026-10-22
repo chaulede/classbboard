@@ -1,602 +1,761 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>中文网课互动白板 - 终极完全体</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/pinyin-pro@3.16.0/dist/index.js"></script>
-    <!-- 核心库引入 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.16/mammoth.browser.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <style>
-        #whiteboardContent {
-            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
-            line-height: 3.5; 
-            outline: none;
-            word-break: break-word;
-            padding-top: 20px;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>中文网课互动白板 - 教师知识库版</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/pinyin-pro@3.16.0/dist/index.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.16/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+    #whiteboardContent {
+        font-family: 'KaiTi', '楷体', 'STKaiti', 'Kaiti SC', 'Songti SC', 'PingFang SC', 'Microsoft YaHei', serif;
+        line-height: 3.5;
+        outline: none;
+        word-break: break-word;
+        padding-top: 20px;
+    }
+    ruby { ruby-align: center; margin: 0 4px; font-size: 1em; }
+    rt {
+        font-size: 0.8em !important; color: #1d4ed8 !important;
+        font-family: 'Arial', 'Helvetica', sans-serif !important; font-weight: bold !important;
+        margin-bottom: 2px; line-height: 1.1;
+    }
+    .english-line {
+        display: block !important; font-size: 0.85em !important; color: #64748b;
+        font-family: 'Arial', 'Helvetica', sans-serif; font-style: italic;
+        border-left: 3px solid #cbd5e1; padding-left: 8px;
+        margin: 8px 0 20px 0 !important; line-height: 1.4 !important;
+        width: 100%;
+    }
+    .toolbar-btn {
+        font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        padding: 6px 10px; background-color: #f1f5f9; border: 1px solid #cbd5e1;
+        border-radius: 6px; font-size: 13px; color: #334155; cursor: pointer; font-weight: 500; transition: all 0.2s;
+    }
+    .toolbar-btn:hover { background-color: #e2e8f0; }
+    .btn-draw-active { background-color: #3b82f6 !important; color: white !important; border-color: #2563eb !important; }
+    #drawToolbar {
+        display: none; position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+        background: white; padding: 8px 16px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        z-index: 100; align-items: center; gap: 12px; border: 1px solid #e2e8f0; flex-wrap: wrap;
+    }
+    .color-btn { width: 24px; height: 24px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
+    .color-btn.active { border-color: #334155; transform: scale(1.15); }
+    .color-btn:hover { transform: scale(1.15); }
+    #drawCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 50; pointer-events: none; touch-action: none; }
+    #drawCanvas.active { pointer-events: auto; cursor: crosshair; }
+    .loader-overlay {
+        position: absolute; inset: 0; background: rgba(255,255,255,0.9);
+        z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .spinner {
+        border: 4px solid rgba(0, 0, 0, 0.1); width: 40px; height: 40px;
+        border-radius: 50%; border-left-color: #4f46e5; animation: spin 1s linear infinite; margin-bottom: 15px;
+    }
+    .loader {
+        border: 2px solid rgba(255, 255, 255, 0.3); width: 16px; height: 16px;
+        border-radius: 50%; border-left-color: #ffffff; animation: spin 1s linear infinite;
+        display: inline-block; vertical-align: middle; margin-right: 6px;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .kb-item {
+        padding: 8px; border-radius: 6px; cursor: pointer; transition: 0.2s; border: 1px solid #e2e8f0; margin-bottom: 6px; background: white;
+    }
+    .kb-item:hover { background: #eff6ff; border-color: #93c5fd; }
+    .kb-title { font-weight: bold; color: #1e40af; font-size: 13px; }
+    .kb-tags { font-size: 10px; color: #64748b; margin-top: 2px; }
 
-        ruby { ruby-align: center; margin: 0 4px; font-size: 1em; }
-        rt {
-            font-size: 0.8em !important; color: #1d4ed8 !important; 
-            font-family: 'Arial', sans-serif !important; font-weight: bold !important; 
-            margin-bottom: 2px; line-height: 1.1;
-        }
+    .markdown-body { line-height: 1.8; font-family: 'Microsoft YaHei', sans-serif; font-size: 15px; color: #334155; }
+    .markdown-body h1, .markdown-body h2, .markdown-body h3 { color: #1e3a8a; margin-top: 20px; margin-bottom: 12px; font-weight: bold; }
+    .markdown-body h2 { font-size: 1.4em; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; }
+    .markdown-body h3 { font-size: 1.2em; }
+    .markdown-body p { margin-bottom: 12px; }
+    .markdown-body table { width: 100%; border-collapse: collapse; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-radius: 6px; overflow: hidden; }
+    .markdown-body th { background-color: #f8fafc; color: #1e40af; font-weight: bold; padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; }
+    .markdown-body td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; }
+    .markdown-body tr:nth-child(even) { background-color: #f8fafc; }
+    .markdown-body tr:hover { background-color: #eff6ff; }
+    .markdown-body blockquote { border-left: 4px solid #3b82f6; background-color: #eff6ff; padding: 12px 16px; margin: 20px 0; border-radius: 0 8px 8px 0; color: #1e40af; font-weight: 500; }
+    .markdown-body ul { list-style-type: disc; padding-left: 20px; margin-bottom: 15px; }
 
-        .english-line {
-            display: block; font-size: 1.1em !important; color: #64748b;
-            font-family: 'Arial', sans-serif; font-style: italic;
-            border-left: 4px solid #cbd5e1; padding-left: 12px !important;
-            margin: 15px 0 30px 0 !important; line-height: 1.4 !important;
-        }
-
-        .toolbar-btn {
-            padding: 6px 10px; background-color: #f1f5f9; border: 1px solid #cbd5e1;
-            border-radius: 6px; font-size: 13px; color: #334155; cursor: pointer; font-weight: 500; transition: all 0.2s;
-        }
-        .toolbar-btn:hover { background-color: #e2e8f0; }
-
-        .btn-draw-active { background-color: #3b82f6; color: white; border-color: #2563eb; }
-        
-        #drawToolbar {
-            display: none; position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
-            background: white; padding: 8px 16px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            z-index: 100; align-items: center; gap: 12px; border: 1px solid #e2e8f0;
-        }
-
-        .color-btn { width: 24px; height: 24px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
-        .color-btn.active { border-color: #334155; transform: scale(1.15); }
-        .color-btn:hover { transform: scale(1.15); }
-
-        #drawCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 50; pointer-events: none; }
-        #drawCanvas.active { pointer-events: auto; cursor: crosshair; }
-
-        /* 加载动画 */
-        .loader-overlay {
-            position: absolute; inset: 0; background: rgba(255,255,255,0.9);
-            z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center;
-        }
-        .spinner {
-            border: 4px solid rgba(0, 0, 0, 0.1); width: 40px; height: 40px;
-            border-radius: 50%; border-left-color: #4f46e5; animation: spin 1s linear infinite; margin-bottom: 15px;
-        }
-        /* 修复按钮内的加载小图标样式 */
-        .loader {
-            border: 2px solid rgba(255, 255, 255, 0.3); width: 16px; height: 16px;
-            border-radius: 50%; border-left-color: #ffffff; animation: spin 1s linear infinite;
-            display: inline-block; vertical-align: middle; margin-right: 6px;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
+    .sidebar-transition { transition: all 0.3s ease-in-out; }
+</style>
 </head>
 <body class="bg-slate-100 min-h-screen p-4 md:p-6 overflow-hidden">
-    <div class="flex flex-col md:flex-row h-[calc(100vh-3rem)] gap-6">
-        
-        <!-- 左侧：白板 -->
-        <div class="flex-1 bg-white rounded-2xl shadow-lg flex flex-col border-4 border-blue-200 p-4 md:p-6 relative">
-            
-            <div id="drawToolbar">
-                <span class="text-sm font-bold text-slate-600 mr-2">画笔颜色:</span>
-                <div class="flex gap-2">
-                    <div class="color-btn active" style="background-color: #ef4444;" onclick="setPenColor('#ef4444', this)"></div>
-                    <div class="color-btn" style="background-color: #3b82f6;" onclick="setPenColor('#3b82f6', this)"></div>
-                    <div class="color-btn" style="background-color: #eab308;" onclick="setPenColor('#eab308', this)"></div>
-                    <div class="color-btn" style="background-color: #111;" onclick="setPenColor('#111', this)"></div>
-                </div>
-                <div class="w-px h-6 bg-slate-300 mx-2"></div>
-                <button onclick="clearCanvas()" class="text-xs bg-red-100 text-red-700 px-3 py-1 rounded hover:bg-red-200 font-bold">🧹 清空笔迹</button>
-                <button onclick="undoStroke()" class="text-xs bg-slate-100 text-slate-700 px-3 py-1 rounded hover:bg-slate-200 font-bold">↩️ 撤销笔迹</button>
+<div class="flex flex-col md:flex-row h-[calc(100vh-3rem)] gap-6 relative">
+    
+    <!-- 左侧：白板 -->
+    <div class="flex-1 bg-white rounded-2xl shadow-lg flex flex-col border-4 border-blue-200 p-4 md:p-6 relative w-full sidebar-transition">
+        <div id="drawToolbar">
+            <span class="text-sm font-bold text-slate-600 mr-2">画笔颜色:</span>
+            <div class="flex gap-2">
+                <div class="color-btn active" style="background-color: #ef4444;" data-color="#ef4444"></div>
+                <div class="color-btn" style="background-color: #3b82f6;" data-color="#3b82f6"></div>
+                <div class="color-btn" style="background-color: #eab308;" data-color="#eab308"></div>
+                <div class="color-btn" style="background-color: #111;" data-color="#111"></div>
             </div>
+            <div class="w-px h-6 bg-slate-300 mx-2"></div>
+            <button id="btnClearCanvas" class="text-xs bg-red-100 text-red-700 px-3 py-1 rounded hover:bg-red-200 font-bold">🧹 清空笔迹</button>
+            <button id="btnUndoStroke" class="text-xs bg-slate-100 text-slate-700 px-3 py-1 rounded hover:bg-slate-200 font-bold">↩️ 撤销笔迹</button>
+        </div>
 
-            <div class="flex items-center justify-between pb-3 border-b border-slate-200 mb-4 flex-wrap gap-2">
-                <div class="flex items-center">
-                    <span class="text-2xl mr-3">📝</span>
-                    <h2 class="text-xl font-bold text-slate-800">中文互动白板</h2>
-                </div>
-                <div class="flex items-center gap-2 flex-wrap">
-                    <span class="text-sm text-slate-500">字号:</span>
-                    <button id="btnAPlus" class="toolbar-btn font-bold" title="放大字号">A+</button>
-                    <button id="btnAMinus" class="toolbar-btn font-bold" title="缩小字号">A-</button>
-                    <span class="mx-1 text-slate-300">|</span>
-                    <button id="btnBold" class="toolbar-btn font-bold" style="font-family: serif;" title="加粗">B</button>
-                    <button id="btnRed" class="toolbar-btn text-red-500 font-bold" title="标红">A</button>
-                    <span class="mx-1 text-slate-300">|</span>
-                    <button id="btnDraw" class="toolbar-btn bg-slate-100 text-slate-700 border-slate-300 font-bold">
-                        ✏️ 电子教鞭
-                    </button>
-                    <button id="btnAddPinyin" class="toolbar-btn bg-blue-100 text-blue-700 border-blue-300 font-bold">
-                        ✨ 划选加拼音
-                    </button>
-                    <button id="btnTranslate" class="toolbar-btn bg-purple-100 text-purple-700 border-purple-300 font-bold">
-                        🌐 划选加翻译
-                    </button>
-                    <!-- 恢复的撤销还原按钮 -->
-                    <button id="btnUndo" class="toolbar-btn bg-amber-50 text-amber-700 border-amber-200">↩️ 撤销</button>
-                    <button id="btnRedo" class="toolbar-btn bg-amber-50 text-amber-700 border-amber-200">⏭️ 还原</button>
-                    <button id="btnClear" class="toolbar-btn bg-red-50 text-red-700 border-red-200">🗑️ 清空</button>
-                </div>
+        <div class="flex items-center justify-between pb-3 border-b border-slate-200 mb-4 flex-wrap gap-2">
+            <div class="flex items-center">
+                <span class="text-2xl mr-3">📝</span>
+                <h2 class="text-xl font-bold text-slate-800">中文互动白板</h2>
             </div>
-
-            <div class="relative flex-1 overflow-hidden rounded-lg border border-slate-200 bg-white">
-                <canvas id="drawCanvas"></canvas>
-                
-                <div id="loadingOverlay" class="loader-overlay hidden">
-                    <div class="spinner"></div>
-                    <p class="text-slate-700 font-bold text-lg">正在深度解析文档，请稍候...</p>
-                    <p class="text-slate-400 text-xs mt-2">(如果是大文件，可能需要几秒钟)</p>
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-sm text-slate-500">字号:</span>
+                <button id="btnAPlus" class="toolbar-btn font-bold">A+</button>
+                <button id="btnAMinus" class="toolbar-btn font-bold">A-</button>
+                <span class="mx-1 text-slate-300">|</span>
+                <button id="btnBold" class="toolbar-btn font-bold" style="font-family: serif;">B</button>
+                <button id="btnRed" class="toolbar-btn text-red-500 font-bold">A</button>
+                <span class="mx-1 text-slate-300">|</span>
+                <button id="btnDraw" class="toolbar-btn bg-slate-100 text-slate-700 border-slate-300 font-bold">✏️ 电子教鞭</button>
+                <button id="btnAddPinyin" class="toolbar-btn bg-blue-100 text-blue-700 border-blue-300 font-bold">✨ 划选加拼音</button>
+                <button id="btnClearPinyin" class="toolbar-btn bg-blue-50 text-blue-800 border-blue-200 font-bold">🔤 清除拼音</button>
+                <div class="inline-flex items-center bg-purple-100 border border-purple-300 rounded-lg overflow-hidden">
+                    <select id="targetLang" class="bg-transparent text-purple-700 font-bold text-xs px-2 py-1.5 outline-none cursor-pointer">
+                        <option value="English">英语 (English)</option>
+                        <option value="French">法语 (Français)</option>
+                        <option value="Italian">意大利语 (Italiano)</option>
+                        <option value="German">德语 (Deutsch)</option>
+                        <option value="Portuguese">葡萄牙语 (Português)</option>
+                        <option value="Spanish">西班牙语 (Español)</option>
+                        <option value="Vietnamese">越南语 (Tiếng Việt)</option>
+                        <option value="Indonesian">印尼语 (Bahasa)</option>
+                        <option value="Japanese">日语 (日本語)</option>
+                        <option value="Russian">俄语 (Русский)</option>
+                        <option value="Thai">泰语 (ภาษาไทย)</option>
+                        <option value="Korean">韩语 (한국어)</option>
+                    </select>
+                    <button id="btnTranslate" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 text-xs font-bold transition cursor-pointer">🌐 划选翻译</button>
                 </div>
-
-                <div id="whiteboardContent" 
-                     contenteditable="true" 
-                     class="absolute inset-0 w-full h-full p-4 text-xl md:text-2xl text-slate-700 overflow-auto z-10"
-                >
-                    <p>欢迎使用！<br>1. 右侧上传 PDF/Word 自动解析提取文字。<br>2. 划选文字加拼音、翻译。<br>3. 一键生成复习笔记或测试卷。</p>
-                </div>
+                <button id="btnUndo" class="toolbar-btn bg-amber-50 text-amber-700 border-amber-200">↩️ 撤销</button>
+                <button id="btnRedo" class="toolbar-btn bg-amber-50 text-amber-700 border-amber-200">⏭️ 还原</button>
+                <button id="btnClear" class="toolbar-btn bg-red-50 text-red-700 border-red-200">🗑️ 清空</button>
             </div>
         </div>
 
-        <!-- 右侧：控制面板 -->
-        <div class="w-full md:w-80 bg-white rounded-2xl shadow p-5 flex flex-col space-y-4 border border-slate-200 overflow-y-auto">
-            <div class="text-center">
-                <h1 class="text-lg font-bold text-slate-800">📖 智能课堂助手</h1>
+        <div class="relative flex-1 overflow-hidden rounded-lg border border-slate-200 bg-white" id="canvasWrapper">
+            <canvas id="drawCanvas"></canvas>
+            <div id="loadingOverlay" class="loader-overlay hidden">
+                <div class="spinner"></div>
+                <p class="text-slate-700 font-bold text-lg">正在解析，请稍候...</p>
             </div>
+            <div id="whiteboardContent"
+                 contenteditable="true"
+                 class="absolute inset-0 w-full h-full p-4 text-xl md:text-2xl text-slate-700 overflow-auto z-10"
+            ><p>欢迎使用！<br>1. 右侧输入关键词检索知识点。<br>2. 选中文字可加拼音、翻译。<br>3. 可一键整理笔记或出题。</p></div>
+        </div>
+    </div>
 
-            <div class="bg-blue-50 p-2 rounded-lg border border-blue-100">
-                <label class="block text-xs font-medium text-slate-700 mb-1">🔑 DeepSeek API Key (必填)</label>
-                <input type="password" id="apiKey" placeholder="sk-..." class="w-full border border-slate-300 rounded-lg p-2 text-xs outline-none focus:ring-1 focus:ring-blue-500">
+    <!-- 侧边栏悬浮展开按钮 (默认隐藏) -->
+    <button id="btnExpandSidebar" class="hidden fixed top-6 right-6 z-50 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg shadow-lg font-bold transition flex items-center gap-2">
+        ⬅️ 展开面板
+    </button>
+
+    <!-- 右侧：控制面板 -->
+    <div id="sidebarPanel" class="w-full md:w-80 bg-white rounded-2xl shadow p-5 flex flex-col space-y-4 border border-slate-200 overflow-y-auto sidebar-transition shrink-0">
+        
+        <div class="flex justify-between items-center pb-2 border-b border-slate-100">
+            <h1 class="text-lg font-bold text-slate-800 ml-2">📖 智能课堂助手</h1>
+            <button id="btnCollapseSidebar" class="text-slate-400 hover:text-indigo-600 p-1" title="收起面板">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="bg-indigo-50 p-3 rounded-lg border border-indigo-200 space-y-2">
+            <label class="block text-xs font-bold text-indigo-800 mb-1">🔍 检索知识点</label>
+            <div class="flex gap-1">
+                <input type="text" id="kbSearchInput" placeholder="输入：极了、正好..." class="w-full border border-indigo-300 rounded-lg p-1.5 text-xs outline-none focus:ring-1 focus:ring-indigo-500 bg-white">
+                <button id="btnSearchKb" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 text-xs font-bold rounded-lg transition">搜索</button>
             </div>
+            <div id="kbResults" class="max-h-40 overflow-y-auto mt-2 hidden"></div>
             
+            <div class="border-t border-indigo-200 pt-2 mt-2">
+                <div class="flex items-center justify-between">
+                    <label class="block text-[10px] text-indigo-600">导入知识库 (.json)</label>
+                    <input type="file" id="kbFileUpload" accept=".json" class="text-[10px] text-slate-500 w-40 file:mr-1 file:py-0.5 file:px-1 file:rounded file:border-0 file:bg-indigo-100 file:text-indigo-700 cursor-pointer">
+                </div>
+                <p class="text-[10px] text-indigo-400 mt-1" id="kbStatus">尚未导入知识库</p>
+            </div>
+        </div>
+
+        <div class="bg-blue-50 p-3 rounded-lg border border-blue-100 space-y-2">
             <div>
-                <label class="block text-xs font-medium text-slate-700 mb-1">📌 学生级别</label>
-                <select id="studentLevel" class="w-full border border-slate-300 rounded-lg p-2 text-sm outline-none focus:ring-1 focus:ring-blue-500">
-                    <option value="HSK 1">HSK 1</option>
-                    <option value="HSK 2">HSK 2</option>
-                    <option value="HSK 3" selected>HSK 3</option>
-                    <option value="HSK 4">HSK 4</option>
-                    <option value="HSK 5">HSK 5</option>
-                    <option value="HSK 6">HSK 6</option>
+                <label class="block text-xs font-medium text-slate-700 mb-1">🤖 AI 模型</label>
+                <select id="modelProvider" class="w-full border border-slate-300 rounded-lg p-1.5 text-xs outline-none focus:ring-1 focus:ring-blue-500 bg-white">
+                    <option value="deepseek" selected>DeepSeek (deepseek-chat)</option>
+                    <option value="claude">Claude (claude-3-5-haiku)</option>
+                    <option value="qwen">千问 (qwen-max)</option>
                 </select>
             </div>
-
             <div>
-                <label class="block text-xs font-medium text-slate-700 mb-1">🎯 课程主题</label>
-                <input type="text" id="courseTopic" placeholder="例如：在餐厅点菜" class="w-full border border-slate-300 rounded-lg p-2 text-sm outline-none focus:ring-1 focus:ring-blue-500">
-            </div>
-
-            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                <label class="block text-xs font-medium text-slate-700 mb-1">📂 上传教学文档 (PDF/Word)</label>
-                <div class="flex items-center gap-2">
-                    <input type="file" id="documentFile" accept=".pdf,.docx,.doc,.txt" class="w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 cursor-pointer">
-                    <button id="btnClearFile" class="text-red-500 hover:text-red-700 font-bold px-2 py-1 bg-red-50 rounded" title="删除上传的文件">✖</button>
-                </div>
-                <p id="fileNameDisplay" class="text-[10px] text-slate-500 mt-1 truncate"></p>
-            </div>
-
-            <div class="flex flex-col gap-2.5 mt-auto pt-2">
-                <button id="btnGenNotes" class="w-full bg-emerald-600 text-white py-2 rounded-lg font-medium hover:bg-emerald-700 transition text-sm cursor-pointer flex justify-center items-center">
-                    📚 一键整理白板笔记
-                </button>
-                <button id="btnDownloadNotes" class="hidden w-full bg-emerald-700 text-white py-1.5 rounded-lg text-xs hover:bg-emerald-800 transition cursor-pointer">
-                    📥 下载复习笔记 (Word)
-                </button>
-
-                <button id="btnGenEx" class="w-full bg-indigo-600 text-white py-2 rounded-lg font-medium hover:bg-indigo-700 transition text-sm cursor-pointer flex justify-center items-center mt-2 border-t border-slate-200 pt-3">
-                    ✍️ 生成全套测试题
-                </button>
-                <button id="btnDownloadEx" class="hidden w-full bg-indigo-700 text-white py-1.5 rounded-lg text-xs hover:bg-indigo-800 transition cursor-pointer">
-                    📥 下载测试题 (Word)
-                </button>
+                <label class="block text-xs font-medium text-slate-700 mb-1">🔑 API Key</label>
+                <input type="password" id="apiKey" placeholder="sk-..." class="w-full border border-slate-300 rounded-lg p-1.5 text-xs outline-none focus:ring-1 focus:ring-blue-500 bg-white">
             </div>
         </div>
-    </div>
 
-    <!-- 试卷 Modal -->
-    <div id="examModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex justify-center items-center p-4">
-        <div class="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl flex flex-col">
-            <div class="flex justify-between items-center p-5 border-b border-slate-200">
-                <h2 id="modalTitle" class="text-xl font-bold text-slate-800">📄 生成内容预览</h2>
-                <button onclick="closeModal()" class="text-slate-400 hover:text-red-500 text-2xl font-bold">&times;</button>
-            </div>
-            <div id="examContent" class="p-6 overflow-y-auto flex-1 text-slate-700 whitespace-pre-wrap font-mono text-sm leading-relaxed bg-gray-50"></div>
-            <div class="p-4 border-t flex justify-end gap-3 bg-white rounded-b-2xl">
-                <button onclick="copyExam()" class="px-5 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 font-medium">📋 复制</button>
-                <button id="modalDownloadBtn" class="px-5 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">📥 下载 Word</button>
-            </div>
+        <div class="flex flex-col gap-2.5 mt-auto pt-2">
+            <button id="btnGenNotes" class="w-full bg-emerald-600 text-white py-2 rounded-lg font-medium hover:bg-emerald-700 transition text-sm cursor-pointer flex justify-center items-center">📚 一键整理白板笔记</button>
+            <button id="btnDownloadNotes" class="hidden w-full bg-emerald-700 text-white py-1.5 rounded-lg text-xs hover:bg-emerald-800 transition cursor-pointer">📥 下载复习笔记 (Word)</button>
+            <button id="btnGenEx" class="w-full bg-indigo-600 text-white py-2 rounded-lg font-medium hover:bg-indigo-700 transition text-sm cursor-pointer flex justify-center items-center mt-2 border-t border-slate-200 pt-3">✍️ 生成全套测试题</button>
+            <button id="btnDownloadEx" class="hidden w-full bg-indigo-700 text-white py-1.5 rounded-lg text-xs hover:bg-indigo-800 transition cursor-pointer">📥 下载测试题 (Word)</button>
         </div>
     </div>
+</div>
 
-    <script>
-        // 指定 PDF.js 的云端 Worker 路径
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+<!-- 试卷 Modal -->
+<div id="examModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex justify-center items-center p-4">
+    <div class="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl flex flex-col">
+        <div class="flex justify-between items-center p-5 border-b border-slate-200">
+            <h2 id="modalTitle" class="text-xl font-bold text-slate-800">📄 生成内容预览</h2>
+            <button onclick="closeModal()" class="text-slate-400 hover:text-red-500 text-2xl font-bold">&times;</button>
+        </div>
+        <div id="examContent" class="p-6 overflow-y-auto flex-1 markdown-body bg-white"></div>
+        <div class="p-4 border-t flex justify-end gap-3 bg-white rounded-b-2xl">
+            <button onclick="copyExam()" class="px-5 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 font-medium">📋 复制文本</button>
+            <button id="modalDownloadBtn" class="px-5 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">📥 下载 Word (保留排版)</button>
+        </div>
+    </div>
+</div>
 
-        let exerciseContentText = "";
-        let noteContentText = "";
-        let extractedFileText = "";
-        let currentMode = ""; 
-        const whiteboard = document.getElementById('whiteboardContent');
-        const loadingOverlay = document.getElementById('loadingOverlay');
+<script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
-        // ================= 历史记录引擎 =================
-        let undoStack = [];
-        let redoStack = [];
-        let isUndoRedoing = false; 
-
-        function saveHistory() {
-            if (isUndoRedoing) return;
-            if (undoStack.length > 50) undoStack.shift();
-            undoStack.push(whiteboard.innerHTML);
-            redoStack = []; // 每次有新操作，清空重做栈
+    let exerciseMarkdown = "";
+    let noteMarkdown = "";
+    let extractedFileText = "";
+    let currentMode = "";
+    const whiteboard = document.getElementById('whiteboardContent');
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    
+    // ================= 侧边栏折叠逻辑 =================
+    const sidebarPanel = document.getElementById('sidebarPanel');
+    const btnCollapseSidebar = document.getElementById('btnCollapseSidebar');
+    const btnExpandSidebar = document.getElementById('btnExpandSidebar');
+    
+    function toggleSidebar(show) {
+        if (show) {
+            sidebarPanel.classList.remove('md:w-0', 'md:opacity-0', 'md:overflow-hidden', 'md:ml-[-2rem]');
+            sidebarPanel.classList.add('w-full', 'md:w-80');
+            btnExpandSidebar.classList.add('hidden');
+            if (typeof isDrawMode !== 'undefined' && isDrawMode) setTimeout(resizeCanvas, 310);
+        } else {
+            sidebarPanel.classList.add('md:w-0', 'md:opacity-0', 'md:overflow-hidden', 'md:ml-[-2rem]');
+            sidebarPanel.classList.remove('w-full', 'md:w-80');
+            btnExpandSidebar.classList.remove('hidden');
+            if (typeof isDrawMode !== 'undefined' && isDrawMode) setTimeout(resizeCanvas, 310);
         }
-        saveHistory();
+    }
 
-        // 监听用户的键盘输入
-        whiteboard.addEventListener('input', function() { saveHistory(); });
+    btnCollapseSidebar.addEventListener('click', () => toggleSidebar(false));
+    btnExpandSidebar.addEventListener('click', () => toggleSidebar(true));
 
-        document.getElementById('btnUndo').addEventListener('click', function() {
-            if (undoStack.length > 1) {
-                isUndoRedoing = true;
-                redoStack.push(undoStack.pop());
-                whiteboard.innerHTML = undoStack[undoStack.length - 1];
-                isUndoRedoing = false;
-            } else alert('已经是最初的状态了！');
+
+    // ================= API 配置 =================
+    const apiKeyInput = document.getElementById('apiKey');
+    const modelProviderSelect = document.getElementById('modelProvider');
+
+    window.addEventListener('DOMContentLoaded', () => {
+        if (localStorage.getItem('saved_apiKey')) apiKeyInput.value = localStorage.getItem('saved_apiKey');
+        if (localStorage.getItem('saved_modelProvider')) modelProviderSelect.value = localStorage.getItem('saved_modelProvider');
+    });
+    apiKeyInput.addEventListener('input', () => localStorage.setItem('saved_apiKey', apiKeyInput.value.trim()));
+    modelProviderSelect.addEventListener('change', () => localStorage.setItem('saved_modelProvider', modelProviderSelect.value));
+
+    async function callAI(prompt, systemInstruction = "你是一个专业的国际中文与多国语言教学助手。") {
+        const apiKey = apiKeyInput.value.trim();
+        const provider = modelProviderSelect.value;
+
+        if (!apiKey) { alert('请先在右侧面板填入您的 API Key！'); throw new Error('未填写 API Key'); }
+
+        if (provider === 'claude') {
+            const url = "https://api.anthropic.com/v1/messages";
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+                body: JSON.stringify({
+                    model: "claude-3-5-haiku-20241022", max_tokens: 4096, system: systemInstruction,
+                    messages: [{ role: "user", content: prompt }], temperature: 0.3
+                })
+            });
+            if (!res.ok) throw new Error(`Claude 请求失败 (${res.status})`);
+            const data = await res.json();
+            return (data.content || []).map(b => b.text || '').join('').trim();
+        }
+
+        let url = "", modelName = "";
+        if (provider === 'deepseek') {
+            url = "https://api.deepseek.com/chat/completions"; modelName = "deepseek-chat";
+        } else {
+            url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"; modelName = "qwen-max";
+        }
+
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+            body: JSON.stringify({
+                model: modelName, messages: [{ role: "system", content: systemInstruction }, { role: "user", content: prompt }], temperature: 0.3
+            })
         });
+        if (!res.ok) throw new Error(`API 请求失败 (${res.status})`);
+        const data = await res.json();
+        return data.choices[0].message.content.trim();
+    }
 
-        document.getElementById('btnRedo').addEventListener('click', function() {
-            if (redoStack.length > 0) {
-                isUndoRedoing = true;
-                const nextState = redoStack.pop();
-                undoStack.push(nextState);
-                whiteboard.innerHTML = nextState;
-                isUndoRedoing = false;
-            } else alert('已经是最新的状态了！');
-        });
+    // ================= 知识库引擎 =================
+    let knowledgeBase = [];
 
-        // ================= 文档解析引擎 =================
-        document.getElementById('documentFile').addEventListener('change', async function(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            
-            document.getElementById('fileNameDisplay').textContent = file.name;
-            loadingOverlay.classList.remove('hidden'); 
-            
-            const fileName = file.name.toLowerCase();
-            
+    document.getElementById('kbFileUpload').addEventListener('change', function(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
             try {
-                if (fileName.endsWith('.txt')) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        extractedFileText = e.target.result;
-                        whiteboard.innerHTML = `<p>${extractedFileText.replace(/\n/g, '</p><p>')}</p>`;
-                        loadingOverlay.classList.add('hidden');
-                        saveHistory();
-                    };
-                    reader.readAsText(file, 'UTF-8');
-                } 
-                else if (fileName.endsWith('.docx') || fileName.endsWith('.doc')) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        mammoth.extractRawText({ arrayBuffer: e.target.result }).then(result => {
-                            extractedFileText = result.value;
-                            whiteboard.innerHTML = `<p>${extractedFileText.replace(/\n/g, '</p><p>')}</p>`;
-                            loadingOverlay.classList.add('hidden');
-                            saveHistory();
-                        }).catch(err => {
-                            alert("Word 解析失败：" + err.message);
-                            loadingOverlay.classList.add('hidden');
-                        });
-                    };
-                    reader.readAsArrayBuffer(file);
-                } 
-                else if (fileName.endsWith('.pdf')) {
-                    const reader = new FileReader();
-                    reader.onload = async (e) => {
-                        try {
-                            const typedarray = new Uint8Array(e.target.result);
-                            const pdf = await pdfjsLib.getDocument(typedarray).promise;
-                            let fullText = "";
-                            
-                            for (let i = 1; i <= pdf.numPages; i++) {
-                                const page = await pdf.getPage(i);
-                                const textContent = await page.getTextContent();
-                                let pageText = "";
-                                textContent.items.forEach(item => {
-                                    pageText += item.str;
-                                    if (item.hasEOL) pageText += "\n";
-                                });
-                                fullText += pageText + "\n";
-                            }
-                            
-                            if (!fullText.trim()) {
-                                alert("❌ 提取失败：该 PDF 可能是纯图片扫描版，里面没有真实文字。\n\n💡 解决办法：请用微信/QQ截图提取文字，或手动复制后粘贴到左侧白板。");
-                                whiteboard.innerHTML = '<p>该PDF未提取到文本，请手动复制。</p>';
+                const data = JSON.parse(e.target.result);
+                if (Array.isArray(data)) {
+                    knowledgeBase = data;
+                } else {
+                    const firstArray = Object.values(data).find(val => Array.isArray(val));
+                    if (firstArray) knowledgeBase = firstArray;
+                    else throw new Error("未找到有效的知识点数组");
+                }
+
+                document.getElementById('kbStatus').textContent = `✅ 已加载 ${knowledgeBase.length} 个知识点`;
+                document.getElementById('kbStatus').classList.add('text-green-600');
+                document.getElementById('kbStatus').classList.remove('text-indigo-400');
+                
+                event.target.value = '';
+                document.getElementById('kbResults').classList.add('hidden');
+            } catch (err) {
+                alert('解析知识库文件失败，请检查 JSON 格式：\n' + err.message);
+            }
+        };
+        reader.readAsText(file, 'UTF-8');
+    });
+
+    function searchKnowledge() {
+        const keyword = document.getElementById('kbSearchInput').value.trim().toLowerCase();
+        const resultsBox = document.getElementById('kbResults');
+        
+        if (!keyword) { resultsBox.classList.add('hidden'); return; }
+        if (knowledgeBase.length === 0) { alert('请先导入知识库文件 (.json)！'); return; }
+
+        const results = knowledgeBase.filter(item => {
+            const titleText = (item.grammar_cn || item.title || '').toLowerCase();
+            const titleEn = (item.grammar_en || '').toLowerCase();
+            const tagsMatch = item.tags && item.tags.some(tag => tag.toLowerCase().includes(keyword));
+            return titleText.includes(keyword) || titleEn.includes(keyword) || tagsMatch;
+        });
+
+        resultsBox.innerHTML = '';
+        resultsBox.classList.remove('hidden');
+
+        if (results.length === 0) {
+            resultsBox.innerHTML = `<div class="text-xs text-slate-500 text-center py-2">没有找到“${keyword}”相关知识点</div>`;
+            return;
+        }
+
+        results.slice(0, 15).forEach((item, index) => {
+            const div = document.createElement('div');
+            div.className = 'kb-item';
+            const title = item.grammar_cn || item.title || '无标题';
+            const subTitle = item.grammar_en || item.tags?.join(', ') || '';
+            div.innerHTML = `
+                <div class="kb-title">${title}</div>
+                <div class="kb-tags">${subTitle}</div>
+            `;
+            div.onclick = () => renderKnowledgeToBoard(item);
+            resultsBox.appendChild(div);
+        });
+    }
+
+    document.getElementById('btnSearchKb').addEventListener('click', searchKnowledge);
+    document.getElementById('kbSearchInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') searchKnowledge(); });
+
+    // ================= 渲染到白板 (追加模式) =================
+    function renderKnowledgeToBoard(kbItem) {
+        let html = '';
+        const title = kbItem.grammar_cn || kbItem.title || '知识点';
+        const titleEn = kbItem.grammar_en ? `<br><span style="font-size:0.6em; color:#64748b;">${kbItem.grammar_en}</span>` : '';
+        
+        if (whiteboard.innerText.trim() !== '' && whiteboard.innerHTML !== '<p><br></p>') {
+            html += `<hr style="border: 1px dashed #cbd5e1; margin: 30px 0;"><br>`;
+        }
+
+        html += `<h2 style="font-size:1.3em; font-weight:bold; color:#1e3a8a; margin-bottom:20px; border-bottom:2px solid #93c5fd; padding-bottom:10px;">📖 ${title} ${titleEn}</h2>`;
+
+        if (kbItem.grammar_cn) {
+            if (kbItem.pattern) {
+                html += `<p style="margin-bottom:10px;"><span style="background:#e0f2fe; color:#0369a1; padding:4px 8px; border-radius:4px; font-weight:bold;">句型结构</span> ${kbItem.pattern}</p>`;
+            }
+            if (kbItem.pattern_1) {
+                let patterns = [kbItem.pattern_1, kbItem.pattern_2, kbItem.pattern_3, kbItem.pattern_4].filter(Boolean);
+                html += `<div style="margin-bottom:15px;"><span style="background:#e0f2fe; color:#0369a1; padding:4px 8px; border-radius:4px; font-weight:bold;">句型结构</span><ul style="margin-top:8px; margin-left:20px; list-style-type:disc;">`;
+                patterns.forEach(p => html += `<li>${p}</li>`);
+                html += `</ul></div>`;
+            }
+            if (kbItem.usage) {
+                html += `<p style="margin-bottom:20px;"><span style="background:#dcfce7; color:#166534; padding:4px 8px; border-radius:4px; font-weight:bold;">用法说明</span> ${kbItem.usage}</p>`;
+            }
+            if (kbItem.example_zh) {
+                let lineHtml = '';
+                for (let char of kbItem.example_zh) {
+                    if (/[\u4e00-\u9fa5]/.test(char)) {
+                        const py = window.pinyinPro.pinyin(char, { toneType: 'symbol' });
+                        lineHtml += `<ruby>${char}<rt>${py}</rt></ruby>`;
+                    } else {
+                        lineHtml += char;
+                    }
+                }
+                html += `<p style="margin-top:15px; font-weight:bold;">${lineHtml}</p>`;
+                if (kbItem.example_pinyin) {
+                    html += `<p style="color:#64748b; font-size:0.8em; font-family:Arial;">${kbItem.example_pinyin}</p>`;
+                }
+                if (kbItem.example_en) {
+                    html += `<div class="english-line">${kbItem.example_en}</div>`;
+                }
+            }
+        } 
+        else if (kbItem.content) {
+            if (typeof kbItem.content === 'string') {
+                html += `<p style="margin-bottom:15px; line-height: 1.8;">${kbItem.content}</p>`;
+            } else if (Array.isArray(kbItem.content)) {
+                kbItem.content.forEach(block => {
+                    if (block.type === 'text') {
+                        html += `<p style="margin-bottom:10px;">${block.html}</p>`;
+                    } 
+                    else if (block.type === 'pinyin_sentence') {
+                        let lineHtml = '';
+                        for (let char of block.chinese) {
+                            if (/[\u4e00-\u9fa5]/.test(char)) {
+                                const py = window.pinyinPro.pinyin(char, { toneType: 'symbol' });
+                                lineHtml += `<ruby>${char}<rt>${py}</rt></ruby>`;
                             } else {
-                                extractedFileText = fullText;
-                                let cleanHtml = fullText
-                                    .replace(/\n{3,}/g, '\n\n')
-                                    .split('\n')
-                                    .map(line => line.trim() ? `<p>${line}</p>` : '<br>')
-                                    .join('');
-                                whiteboard.innerHTML = cleanHtml;
+                                lineHtml += char;
                             }
-                            loadingOverlay.classList.add('hidden');
-                            saveHistory();
-                        } catch (err) {
-                            alert("PDF 解析引擎崩溃：\n" + err.message);
-                            loadingOverlay.classList.add('hidden');
                         }
-                    };
-                    reader.readAsArrayBuffer(file);
-                }
-            } catch (err) { 
-                alert("系统文件读取错误：" + err.message); 
-                loadingOverlay.classList.add('hidden');
+                        html += `<p style="margin-top:15px;">${lineHtml}</p>`;
+                        if (block.translation) {
+                            html += `<div class="english-line">${block.translation}</div>`;
+                        }
+                    }
+                });
             }
+        }
+
+        whiteboard.innerHTML = whiteboard.innerHTML + html;
+
+        whiteboard.scrollTo({
+            top: whiteboard.scrollHeight,
+            behavior: 'smooth'
         });
 
-        document.getElementById('btnClearFile').addEventListener('click', function() {
-            document.getElementById('documentFile').value = "";
-            document.getElementById('fileNameDisplay').textContent = "";
-            extractedFileText = "";
+        // 修复历史记录吞并问题：延迟 50ms 后记录
+        setTimeout(saveHistoryImmediate, 50);
+    }
+
+    // ================= 历史记录 =================
+    let undoStack = [], redoStack = [], isUndoRedoing = false, historyTimer = null;
+    
+    function saveHistoryImmediate() {
+        if (isUndoRedoing) return;
+        if (undoStack.length > 0 && undoStack[undoStack.length - 1] === whiteboard.innerHTML) return;
+        if (undoStack.length > 50) undoStack.shift();
+        undoStack.push(whiteboard.innerHTML); redoStack = [];
+    }
+    function saveHistoryDebounced() {
+        if (isUndoRedoing) return; 
+        clearTimeout(historyTimer); 
+        historyTimer = setTimeout(saveHistoryImmediate, 100);
+    }
+    saveHistoryImmediate();
+    whiteboard.addEventListener('input', saveHistoryDebounced);
+
+    document.getElementById('btnUndo').addEventListener('click', function() {
+        clearTimeout(historyTimer); saveHistoryImmediate();
+        if (undoStack.length > 1) { isUndoRedoing = true; redoStack.push(undoStack.pop()); whiteboard.innerHTML = undoStack[undoStack.length - 1]; isUndoRedoing = false; } else alert('已经是最初的状态了！');
+    });
+    document.getElementById('btnRedo').addEventListener('click', function() {
+        if (redoStack.length > 0) { isUndoRedoing = true; const nextState = redoStack.pop(); undoStack.push(nextState); whiteboard.innerHTML = nextState; isUndoRedoing = false; } else alert('已经是最新的状态了！');
+    });
+
+    // ================= 基础操作 =================
+    let currentFontSize = 24;
+    whiteboard.style.fontSize = currentFontSize + 'px';
+    document.getElementById('btnAPlus').addEventListener('click', () => { currentFontSize = Math.min(80, currentFontSize + 2); whiteboard.style.fontSize = currentFontSize + 'px'; });
+    document.getElementById('btnAMinus').addEventListener('click', () => { currentFontSize = Math.max(14, currentFontSize - 2); whiteboard.style.fontSize = currentFontSize + 'px'; });
+    document.getElementById('btnBold').addEventListener('click', () => { document.execCommand('bold', false, null); });
+    document.getElementById('btnRed').addEventListener('click', () => { document.execCommand('foreColor', false, '#ef4444'); });
+
+    document.getElementById('btnAddPinyin').addEventListener('click', function() {
+        const selection = window.getSelection(); if (!selection.rangeCount) return;
+        const range = selection.getRangeAt(0); const selectedText = selection.toString().trim();
+        if (!selectedText) { alert('请先用鼠标选中需要加拼音的汉字！'); return; }
+        const fragment = document.createDocumentFragment();
+        for (let char of selectedText) {
+            if (/[\u4e00-\u9fa5]/.test(char)) {
+                const py = window.pinyinPro.pinyin(char, { toneType: 'symbol' });
+                const ruby = document.createElement('ruby'); ruby.textContent = char;
+                const rt = document.createElement('rt'); rt.textContent = py; ruby.appendChild(rt);
+                fragment.appendChild(ruby); fragment.appendChild(document.createTextNode(''));
+            } else { fragment.appendChild(document.createTextNode(char)); }
+        }
+        range.deleteContents(); range.insertNode(fragment); selection.removeAllRanges(); 
+        setTimeout(saveHistoryImmediate, 50);
+    });
+
+    document.getElementById('btnClearPinyin').addEventListener('click', function() {
+        const rubies = whiteboard.querySelectorAll('ruby'); if (rubies.length === 0) { alert('白板中没有拼音注音可清除。'); return; }
+        rubies.forEach(ruby => {
+            let hanzi = ''; ruby.childNodes.forEach(node => { if (node.nodeType === Node.TEXT_NODE) hanzi += node.nodeValue; });
+            if (!hanzi) { hanzi = ruby.textContent; const rtEls = ruby.querySelectorAll('rt'); rtEls.forEach(rt => { hanzi = hanzi.replace(rt.textContent, ''); }); }
+            const textNode = document.createTextNode(hanzi); ruby.parentNode.replaceChild(textNode, ruby);
         });
+        whiteboard.normalize(); saveHistoryImmediate(); alert('✅ 已清除 ' + rubies.length + ' 个拼音注音');
+    });
 
-        // ================= 基础操作 =================
-        let currentFontSize = 24;
-        whiteboard.style.fontSize = currentFontSize + 'px';
-        document.getElementById('btnAPlus').addEventListener('click', () => {
-            currentFontSize = Math.min(80, currentFontSize + 2);
-            whiteboard.style.fontSize = currentFontSize + 'px';
-        });
-        document.getElementById('btnAMinus').addEventListener('click', () => {
-            currentFontSize = Math.max(14, currentFontSize - 2);
-            whiteboard.style.fontSize = currentFontSize + 'px';
-        });
-        document.getElementById('btnBold').addEventListener('click', () => { document.execCommand('bold', false, null); });
-        document.getElementById('btnRed').addEventListener('click', () => { document.execCommand('foreColor', false, '#ef4444'); });
+    document.getElementById('btnTranslate').addEventListener('click', async function() {
+        const selection = window.getSelection(); if (!selection.rangeCount) return;
+        const range = selection.getRangeAt(0); const selectedText = selection.toString().trim();
+        if (!selectedText) { alert('请先用鼠标选中需要翻译的汉字！'); return; }
+        const targetLang = document.getElementById('targetLang').value;
+        const btn = this; const apiKey = apiKeyInput.value.trim();
+        if (!apiKey) { alert('划选翻译需要先在右侧填入 API Key。'); return; }
 
-        document.getElementById('btnAddPinyin').addEventListener('click', function() {
-            const selection = window.getSelection();
-            if (!selection.rangeCount) return;
-            const range = selection.getRangeAt(0);
-            const selectedText = selection.toString().trim();
-            if (!selectedText) { alert('请先用鼠标选中需要加拼音的汉字！'); return; }
+        btn.innerHTML = "翻译中..."; btn.disabled = true;
+        let translation = "";
+        try { translation = await callAI(`Translate the following Chinese text to ${targetLang}. ONLY output the translation without any extra explanation: "${selectedText}"`, "You are a professional multilingual translator."); } 
+        catch (e) { translation = "(翻译失败: " + e.message + ")"; }
+        btn.innerHTML = "🌐 划选翻译"; btn.disabled = false;
 
-            const fragment = document.createDocumentFragment();
-            for (let char of selectedText) {
-                if (/[\u4e00-\u9fa5]/.test(char)) {
-                    let py = window.pinyinPro.pinyin(char, { toneType: 'symbol' });
-                    const ruby = document.createElement('ruby');
-                    ruby.textContent = char;
-                    const rt = document.createElement('rt');
-                    rt.textContent = py;
-                    ruby.appendChild(rt);
-                    fragment.appendChild(ruby);
-                    fragment.appendChild(document.createTextNode('\u200B'));
-                } else {
-                    fragment.appendChild(document.createTextNode(char === ' ' ? '\u00A0' : char));
-                }
-            }
-            range.deleteContents();
-            range.insertNode(fragment);
-            selection.removeAllRanges();
-            saveHistory();
-        });
+        // 强制换行并插入
+        const block = document.createElement('div'); 
+        block.className = 'english-line'; 
+        block.innerHTML = `<span style="font-weight:bold;">[${targetLang}]</span> ${translation}`;
+        
+        const br1 = document.createElement('br');
+        
+        range.collapse(false); 
+        range.insertNode(br1);
+        range.insertNode(block);
+        
+        const br2 = document.createElement('br'); 
+        block.after(br2);
+        
+        const newRange = document.createRange(); 
+        newRange.setStartAfter(br2); 
+        newRange.collapse(true);
+        selection.removeAllRanges(); 
+        selection.addRange(newRange); 
+        
+        // 延迟捕获历史记录
+        setTimeout(saveHistoryImmediate, 50);
+    });
 
-        // ================= 划选加翻译 =================
-        document.getElementById('btnTranslate').addEventListener('click', async function() {
-            const selection = window.getSelection();
-            if (!selection.rangeCount) return;
-            const range = selection.getRangeAt(0);
-            const selectedText = selection.toString().trim();
-            if (!selectedText) { alert('请先用鼠标选中需要翻译的汉字！'); return; }
+    // ================= 一键整理笔记 =================
+    document.getElementById('btnGenNotes').addEventListener('click', async function() {
+        const apiKey = apiKeyInput.value.trim(); const sourceText = whiteboard.innerText.trim();
+        if (!apiKey) { alert('生成笔记必须填入 API Key！'); return; }
+        if (!sourceText) { alert('白板内容为空！'); return; }
 
-            const btn = this;
-            btn.innerHTML = "🌐 翻译中...";
-            btn.disabled = true;
+        let detectedLang = "English"; 
+        const translationBlocks = whiteboard.querySelectorAll('.english-line');
+        if (translationBlocks.length > 0) {
+            const textContent = translationBlocks[0].innerText; const match = textContent.match(/^\[(.*?)\]/);
+            if (match && match[1]) detectedLang = match[1];
+        }
 
-            let translation = "";
-            const apiKey = document.getElementById('apiKey').value.trim();
+        const btn = this; const originalText = btn.innerHTML;
+        btn.innerHTML = `<span class="loader"></span> 正在排版笔记...`; btn.disabled = true;
 
-            try {
-                if (apiKey) {
-                    // 已修正 DeepSeek 官方标准接口地址（去掉 /v1）
-                    const res = await fetch('https://api.deepseek.com/chat/completions', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-                        body: JSON.stringify({
-                            model: "deepseek-chat",
-                            messages: [{ role: "system", content: "Translate Chinese to English. ONLY output the English translation." }, { role: "user", content: selectedText }],
-                            temperature: 0.1
-                        })
-                    });
-                    const data = await res.json();
-                    translation = data.choices[0].message.content.trim();
-                } else {
-                    const res = await fetch(`https://api.vvhan.com/api/fy?text=${encodeURIComponent(selectedText)}`);
-                    const data = await res.json();
-                    if (data.success && data.data) translation = data.data.en;
-                }
-            } catch (e) { translation = "(翻译失败)"; }
+        const prompt = `你是一位拥有10年经验的国际中文教师。请根据白板语料，提取出结构化复习笔记。
+【语言要求】必须生成【中文】和【${detectedLang}】双语对照。
+【严格排版格式模板】请务必严格按照以下 Markdown 格式输出：
+## 一、核心词汇 / Core Vocabulary
+| 词汇 | 拼音 | 词性 | ${detectedLang} |
+| --- | --- | --- | --- |
+| 例子 | lì zi | 名词 | example |
 
-            btn.innerHTML = "🌐 划选加翻译";
-            btn.disabled = false;
+## 二、重点语法 / Key Grammar Points
+1. 【语法点名称】
+【用法说明】...
+· 中文例句 — ${detectedLang} translation.
 
-            const engLine = document.createElement('div');
-            engLine.className = 'english-line';
-            engLine.textContent = translation;
+## 三、典型例句 / Typical Example Sentences
+· 中文例句 — ${detectedLang} translation.
 
-            range.collapse(false);
-            const br = document.createElement('br');
-            range.insertNode(br);
-            range.insertNode(engLine);
-            engLine.after(document.createElement('br'));
-            selection.removeAllRanges();
-            saveHistory();
-        });
+## 四、课后练习 / Homework Exercises
+1. 中文题目 — ${detectedLang} translation.
 
-        // ================= 一键整理笔记 =================
-        document.getElementById('btnGenNotes').addEventListener('click', async function() {
-            const apiKey = document.getElementById('apiKey').value.trim();
-            const level = document.getElementById('studentLevel').value;
-            const whiteboardText = whiteboard.innerText.trim();
-            let sourceText = whiteboardText.length > 10 ? whiteboardText : extractedFileText;
-            
-            if (!apiKey) { alert('生成笔记必须填入 DeepSeek API Key！'); return; }
-            if (!sourceText) { alert('白板和上传文档中都没有内容！'); return; }
-
-            const btn = this;
-            const originalText = btn.innerHTML;
-            btn.innerHTML = `<span class="loader"></span> 正在提炼笔记...`;
-            btn.disabled = true;
-
-            let prompt = `你是一位拥有10年经验的国际中文教师。请根据我提供的白板语料，提取出结构化复习笔记。
-【严格要求】
-1. 不要照抄原文，请进行分类汇总。
-2. 必须包含四个板块：【核心词汇】（带拼音和词性）、【重点语法】、【典型例句】（中英对照）、【课后练习】（出2道小题）。
-3. 语言要精炼，排版要像印刷出来的讲义一样清晰。
+> **📌 复习提示 / Review Tip:**
+> 请在此处用两句话总结本节课的核心重点，方便学生复习。
 【白板语料】\n${sourceText}`;
 
-            try {
-                // 已修正 DeepSeek 官方标准接口地址（去掉 /v1）
-                const res = await fetch('https://api.deepseek.com/chat/completions', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-                    body: JSON.stringify({ model: "deepseek-chat", messages: [{ role: "user", content: prompt }] })
-                });
-                const data = await res.json();
-                noteContentText = data.choices[0].message.content;
-                currentMode = 'note';
-                
-                document.getElementById('modalTitle').innerText = "📚 复习笔记整理完毕";
-                document.getElementById('examContent').innerText = noteContentText;
-                document.getElementById('examModal').classList.remove('hidden');
-                document.getElementById('btnDownloadNotes').classList.remove('hidden');
-            } catch (e) { alert("整理失败：" + e.message); }
-            finally {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }
-        });
+        try {
+            noteMarkdown = await callAI(prompt);
+            currentMode = 'note';
+            document.getElementById('modalTitle').innerText = "📚 复习笔记整理完毕";
+            document.getElementById('examContent').innerHTML = marked.parse(noteMarkdown);
+            document.getElementById('examModal').classList.remove('hidden');
+            document.getElementById('btnDownloadNotes').classList.remove('hidden');
+            document.getElementById('btnDownloadEx').classList.add('hidden');
+        } catch (e) { alert("整理失败：" + e.message); } 
+        finally { btn.innerHTML = originalText; btn.disabled = false; }
+    });
 
-        // ================= 生成测试题 =================
-        document.getElementById('btnGenEx').addEventListener('click', async function() {
-            const apiKey = document.getElementById('apiKey').value.trim();
-            const level = document.getElementById('studentLevel').value;
-            const topic = document.getElementById('courseTopic').value.trim() || '综合应用';
-            const whiteboardText = whiteboard.innerText.trim();
-            
-            let sourceText = whiteboardText.length > 10 ? whiteboardText : extractedFileText;
-            if (!sourceText) { alert('无内容可出题！'); return; }
-            if (!apiKey) { alert('必须填入 DeepSeek API Key！'); return; }
+    // ================= 生成测试题 =================
+    document.getElementById('btnGenEx').addEventListener('click', async function() {
+        const apiKey = apiKeyInput.value.trim(); const sourceText = whiteboard.innerText.trim();
+        if (!sourceText) { alert('白板内容为空，无内容可出题！'); return; }
+        if (!apiKey) { alert('必须填入 API Key！'); return; }
 
-            const btn = this;
-            const originalText = btn.innerHTML;
-            btn.innerHTML = `<span class="loader"></span> AI 正在出题...`;
-            btn.disabled = true;
+        let detectedLang = "English";
+        const translationBlocks = whiteboard.querySelectorAll('.english-line');
+        if (translationBlocks.length > 0) {
+            const textContent = translationBlocks[0].innerText; const match = textContent.match(/^\[(.*?)\]/);
+            if (match && match[1]) detectedLang = match[1];
+        }
 
-            let pinyinRule = (level === "HSK 1" || level === "HSK 2") ? "【重要】所有句子和选项必须标出拼音！格式为：第一行拼音，第二行汉字。" : "";
+        const btn = this; const originalText = btn.innerHTML;
+        btn.innerHTML = `<span class="loader"></span> AI 正在出题...`; btn.disabled = true;
 
-            let prompt = `你是一个极度严格的 ${level} 命题专家。生成一套关于“${topic}”的测试题。
-${pinyinRule}
-【要求】包含听力、阅读、书写三大板块，附带答案与解析。无法显示图片请用【图：描述】代替。
+        const prompt = `你是一个极度严格的 HSK3 命题专家。生成一套测试题。
+【语言要求】所有题目、选项和答案解析，都必须采用【中文】和【${detectedLang}】双语对照输出。
+【排版要求】请使用 Markdown 格式排版。包含听力、阅读、书写三大板块。选择题请用列表形式。
 【语料】\n${sourceText}`;
 
-            try {
-                // 已修正 DeepSeek 官方标准接口地址（去掉 /v1）
-                const res = await fetch('https://api.deepseek.com/chat/completions', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-                    body: JSON.stringify({ model: "deepseek-chat", messages: [{ role: "user", content: prompt }] })
-                });
-                const data = await res.json();
-                exerciseContentText = data.choices[0].message.content;
-                currentMode = 'exam';
-                
-                document.getElementById('modalTitle').innerText = "📄 AI 生成的测试题";
-                document.getElementById('examContent').innerText = exerciseContentText;
-                document.getElementById('examModal').classList.remove('hidden');
-                document.getElementById('btnDownloadEx').classList.remove('hidden');
-            } catch (e) { alert("出题失败：" + e.message); }
-            finally {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }
-        });
+        try {
+            exerciseMarkdown = await callAI(prompt);
+            currentMode = 'exam';
+            document.getElementById('modalTitle').innerText = "📄 AI 生成的测试题";
+            document.getElementById('examContent').innerHTML = marked.parse(exerciseMarkdown);
+            document.getElementById('examModal').classList.remove('hidden');
+            document.getElementById('btnDownloadEx').classList.remove('hidden');
+            document.getElementById('btnDownloadNotes').classList.add('hidden');
+        } catch (e) { alert("出题失败：" + e.message); } 
+        finally { btn.innerHTML = originalText; btn.disabled = false; }
+    });
 
-        // 弹窗统一控制与下载
-        document.getElementById('modalDownloadBtn').addEventListener('click', function() {
-            const textToDownload = currentMode === 'note' ? noteContentText : exerciseContentText;
-            const fileName = currentMode === 'note' ? '复习笔记' : '测试题';
-            const blob = new Blob(['\ufeff' + textToDownload], { type: 'application/msword' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = `${fileName}_${document.getElementById('studentLevel').value}.doc`;
-            a.click();
-        });
+    // ================= 弹窗 / 下载 / 复制 =================
+    document.getElementById('modalDownloadBtn').addEventListener('click', function() {
+        const isNote = currentMode === 'note';
+        const contentHtml = document.getElementById('examContent').innerHTML;
+        if (!contentHtml) { alert('没有可下载的内容'); return; }
+        const fileName = isNote ? '复习笔记' : '测试题';
 
-        function closeModal() { document.getElementById('examModal').classList.add('hidden'); }
-        function copyExam() { 
-            const text = document.getElementById('examContent').innerText;
-            navigator.clipboard.writeText(text).then(() => alert('已复制到剪贴板！')); 
-        }
+        const styleForWord = `
+            <style>
+                body { font-family: 'Microsoft YaHei', sans-serif; line-height: 1.6; font-size: 14pt; color: #333; }
+                h2 { color: #1e3a8a; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-top: 20px; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+                th { background-color: #f1f5f9; color: #1e40af; padding: 10px; text-align: left; border: 1px solid #cbd5e1; }
+                td { padding: 10px; border: 1px solid #cbd5e1; }
+                tr:nth-child(even) { background-color: #f8fafc; }
+                blockquote { border-left: 4px solid #3b82f6; background-color: #eff6ff; padding: 10px 15px; margin: 15px 0; color: #1e40af; }
+                ul { padding-left: 20px; }
+            </style>
+        `;
 
-        // 画笔简写
-        const canvas = document.getElementById('drawCanvas');
-        const ctx = canvas.getContext('2d');
-        let isDrawing = false, isDrawMode = false, penColor = '#ef4444', strokes = [];
+        const htmlContent = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>${fileName}</title>${styleForWord}</head><body>${contentHtml}</body></html>`;
         
-        document.getElementById('btnDraw').addEventListener('click', function() {
-            isDrawMode = !isDrawMode;
-            this.classList.toggle('btn-draw-active');
-            canvas.classList.toggle('active');
-            document.getElementById('drawToolbar').style.display = isDrawMode ? 'flex' : 'none';
-            whiteboard.style.pointerEvents = isDrawMode ? 'none' : 'auto';
-            if(isDrawMode) {
-                canvas.width = canvas.parentElement.offsetWidth;
-                canvas.height = canvas.parentElement.offsetHeight;
-                redraw(); // 修复切换教鞭时笔迹被清空的问题
-            }
-        });
+        const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${fileName}.doc`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
 
-        function setPenColor(c, el) { penColor = c; document.querySelectorAll('.color-btn').forEach(e=>e.classList.remove('active')); el.classList.add('active'); }
-        
-        canvas.addEventListener('mousedown', e => {
-            isDrawing = true;
-            const rect = canvas.getBoundingClientRect();
-            ctx.beginPath(); ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
-            strokes.push({ color: penColor, points: [{x: e.clientX - rect.left, y: e.clientY - rect.top}] });
-        });
-        canvas.addEventListener('mousemove', e => {
-            if(!isDrawing) return;
-            const rect = canvas.getBoundingClientRect();
-            ctx.strokeStyle = penColor; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-            ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top); ctx.stroke();
-            strokes[strokes.length - 1].points.push({x: e.clientX - rect.left, y: e.clientY - rect.top});
-        });
-        canvas.addEventListener('mouseup', () => isDrawing = false);
-        
-        function redraw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            strokes.forEach(s => {
-                ctx.beginPath(); ctx.strokeStyle = s.color; ctx.lineWidth = 4;
-                if(s.points.length > 0) {
-                    ctx.moveTo(s.points[0].x, s.points[0].y);
-                    s.points.forEach(p => ctx.lineTo(p.x, p.y));
-                    ctx.stroke();
-                }
-            });
-        }
-        function clearCanvas() { strokes = []; redraw(); }
-        function undoStroke() { strokes.pop(); redraw(); }
+    function closeModal() { document.getElementById('examModal').classList.add('hidden'); currentMode = ""; document.getElementById('examContent').innerHTML = ""; document.getElementById('btnDownloadNotes').classList.add('hidden'); document.getElementById('btnDownloadEx').classList.add('hidden'); }
+    
+    function copyExam() { 
+        const text = document.getElementById('examContent').innerText; if (!text) return; 
+        if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text).then(() => alert('已复制纯文本！')).catch(() => fallbackCopy(text)); } 
+        else { fallbackCopy(text); } 
+    }
+    function fallbackCopy(text) { const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px'; document.body.appendChild(ta); ta.select(); try { const ok = document.execCommand('copy'); alert(ok ? '已复制！' : '复制失败'); } catch (e) { alert('复制失败'); } document.body.removeChild(ta); }
 
-        document.getElementById('btnClear').addEventListener('click', function() {
-            if(confirm("确定清空白板文字？")) {
-                whiteboard.innerHTML = '<p><br></p>';
-                saveHistory();
-            }
+    // ================= 电子教鞭 =================
+    const canvas = document.getElementById('drawCanvas');
+    const ctx = canvas.getContext('2d');
+    const canvasWrapper = document.getElementById('canvasWrapper');
+    let isDrawing = false, isDrawMode = false, penColor = '#ef4444';
+    let strokes = [];
+    let dpr = window.devicePixelRatio || 1;
+
+    function resizeCanvas() {
+        const rect = canvasWrapper.getBoundingClientRect();
+        const cssW = Math.max(1, rect.width), cssH = Math.max(1, rect.height);
+        dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.round(cssW * dpr); canvas.height = Math.round(cssH * dpr);
+        canvas.style.width = cssW + 'px'; canvas.style.height = cssH + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0); redraw();
+    }
+    function redraw() {
+        ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+        strokes.forEach(s => {
+            if (s.points.length === 0) return;
+            ctx.beginPath(); ctx.strokeStyle = s.color; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+            ctx.moveTo(s.points[0].x, s.points[0].y);
+            for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
+            ctx.stroke();
         });
-    </script>
+    }
+    function getPos(e) {
+        const rect = canvas.getBoundingClientRect();
+        return { x: (e.touches ? e.touches[0].clientX : e.clientX) - rect.left, y: (e.touches ? e.touches[0].clientY : e.clientY) - rect.top };
+    }
+    function startStroke(e) {
+        if (!isDrawMode) return;
+        if (e.touches) e.preventDefault();
+        isDrawing = true; const p = getPos(e); strokes.push({ color: penColor, points: [p] });
+        ctx.beginPath(); ctx.strokeStyle = penColor; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.moveTo(p.x, p.y);
+    }
+    function moveStroke(e) {
+        if (!isDrawing) return;
+        if (e.touches) e.preventDefault();
+        const p = getPos(e); const cur = strokes[strokes.length - 1]; cur.points.push(p);
+        ctx.lineTo(p.x, p.y); ctx.stroke();
+    }
+    function endStroke(e) { if (e && e.touches) e.preventDefault(); isDrawing = false; }
+
+    canvas.addEventListener('mousedown', startStroke);
+    canvas.addEventListener('mousemove', moveStroke);
+    window.addEventListener('mouseup', endStroke);
+    canvas.addEventListener('touchstart', startStroke, { passive: false });
+    canvas.addEventListener('touchmove', moveStroke, { passive: false });
+    canvas.addEventListener('touchend', endStroke, { passive: false });
+    canvas.addEventListener('touchcancel', endStroke, { passive: false });
+
+    document.getElementById('btnDraw').addEventListener('click', function() {
+        isDrawMode = !isDrawMode; this.classList.toggle('btn-draw-active'); canvas.classList.toggle('active');
+        document.getElementById('drawToolbar').style.display = isDrawMode ? 'flex' : 'none';
+        whiteboard.style.pointerEvents = isDrawMode ? 'none' : 'auto';
+        if (isDrawMode) resizeCanvas();
+    });
+
+    document.querySelectorAll('.color-btn').forEach(el => {
+        el.addEventListener('click', function() {
+            penColor = this.dataset.color; document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active')); this.classList.add('active');
+        });
+    });
+    document.getElementById('btnClearCanvas').addEventListener('click', function() { strokes = []; redraw(); });
+    document.getElementById('btnUndoStroke').addEventListener('click', function() { strokes.pop(); redraw(); });
+    window.addEventListener('resize', () => { if (isDrawMode) resizeCanvas(); });
+    window.addEventListener('load', () => { if (isDrawMode) resizeCanvas(); });
+    document.getElementById('btnClear').addEventListener('click', function() {
+        if (confirm("确定清空白板文字？（画笔笔迹请用『清空笔迹』）")) { whiteboard.innerHTML = '<p><br></p>'; saveHistoryImmediate(); }
+    });
+</script>
 </body>
 </html>
